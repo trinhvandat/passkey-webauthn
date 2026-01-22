@@ -1,1 +1,265 @@
-# passkey-webauthn
+# WebAuthn Passkey Authentication
+
+A complete WebAuthn/Passkey authentication implementation using Spring Boot and React.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [API Endpoints](#api-endpoints)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Security](#security)
+- [Documentation](#documentation)
+
+## Overview
+
+This project implements passwordless authentication using the WebAuthn (Web Authentication) standard. Users can register and authenticate using biometrics (fingerprint, face recognition) or security keys instead of traditional passwords.
+
+## Features
+
+- **Passwordless Registration** - Register users with passkeys (biometrics/security keys)
+- **Passwordless Authentication** - Login using registered passkeys
+- **Multi-device Support** - Support for platform authenticators and roaming authenticators
+- **Replay Attack Prevention** - One-time challenge usage with expiration
+- **Cloned Authenticator Detection** - Sign count validation to detect credential cloning
+- **Audit Logging** - Complete authentication attempt logging
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| Backend | Spring Boot 4.0.1, Java 17 |
+| WebAuthn Library | webauthn4j 0.28.5 |
+| Database | PostgreSQL 16 |
+| Migrations | Flyway |
+| Frontend | React 18, Vite |
+| Build Tool | Maven |
+
+## Prerequisites
+
+- Java 17+
+- Node.js 18+
+- PostgreSQL 16+
+- Docker (optional)
+
+## Quick Start
+
+### 1. Start Database
+
+```bash
+docker-compose up -d
+```
+
+### 2. Configure Environment
+
+Create `.env` file or set environment variables:
+
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=web-authn
+DB_PASSWORD=WebAuthn@1234
+DB_NAME=web-authn
+MIGRATION_ENABLED=true
+```
+
+### 3. Start Backend
+
+```bash
+export $(cat .env | grep -v '^#' | xargs)
+./mvnw spring-boot:run -Dmaven.test.skip=true
+```
+
+Backend runs on http://localhost:8080
+
+### 4. Start Frontend
+
+```bash
+cd FE
+npm install
+npm run dev
+```
+
+Frontend runs on http://localhost:3000
+
+### 5. Test
+
+1. Open http://localhost:3000
+2. Fill in registration form (username, display name, email)
+3. Click "Register with Passkey"
+4. Complete biometric/security key verification
+5. Login using your registered passkey
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/auth/register:start` | Start passkey registration |
+| POST | `/api/v1/auth/register:complete` | Complete passkey registration |
+| POST | `/api/v1/auth/authenticate:start` | Start passkey authentication |
+| POST | `/api/v1/auth/authenticate:complete` | Complete passkey authentication |
+
+### Example: Start Registration
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/register:start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john_doe",
+    "displayName": "John Doe",
+    "email": "john@example.com"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "data": {
+    "challenge": "abc123...",
+    "rp": { "id": "localhost", "name": "WebAuthn Demo" },
+    "user": { "id": "uuid", "name": "john_doe", "displayName": "John Doe" },
+    "pubKeyCredParams": [
+      { "type": "public-key", "alg": -7 },
+      { "type": "public-key", "alg": -257 }
+    ],
+    "timeout": 60000,
+    "attestation": "none"
+  },
+  "status": 200
+}
+```
+
+## Configuration
+
+### application.yml
+
+```yaml
+web-authn:
+  rp-name: WebAuthn Demo          # Relying Party name
+  rp-id: localhost                # Relying Party ID (domain)
+  origin: http://localhost:3000   # Allowed origin
+  supported-algorithms: -7,-257,-8 # ES256, RS256, EdDSA
+  timeout: 60000                  # Challenge timeout (ms)
+  attestation: none               # Attestation mode
+  resident-key: preferred         # Discoverable credential
+  user-verification: required     # Require user verification
+```
+
+### Supported Algorithms
+
+| Algorithm ID | Name | Description |
+|--------------|------|-------------|
+| -7 | ES256 | ECDSA with P-256 and SHA-256 |
+| -257 | RS256 | RSASSA-PKCS1-v1_5 with SHA-256 |
+| -8 | EdDSA | Edwards-curve Digital Signature |
+
+## Architecture
+
+The project follows **Clean Architecture** (Hexagonal Architecture) with feature-based modules.
+
+```
+src/main/java/com/leonard/web_authn/
+├── feature/
+│   ├── authentication/     # Auth business logic
+│   │   ├── adapter/web/    # Controllers, DTOs
+│   │   └── usecase/        # Use cases
+│   ├── passkey/            # Passkey management
+│   │   ├── adapter/        # Repositories
+│   │   ├── config/         # WebAuthn config
+│   │   ├── domain/         # Entities, value objects
+│   │   └── usecase/        # Challenge generation
+│   └── user/               # User management
+│       ├── adapter/        # Repository
+│       ├── domain/         # User entity
+│       └── usecase/        # User operations
+└── shared/                 # Cross-cutting concerns
+    ├── configuration/      # Spring config
+    ├── dto/                # Common DTOs
+    ├── exception/          # Error handling
+    └── utils/              # Utilities
+```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture documentation.
+
+## Security
+
+### WebAuthn Security Features
+
+1. **Challenge-Response** - Cryptographic proof of authenticator possession
+2. **Origin Validation** - Prevents phishing attacks
+3. **User Verification** - Requires biometric/PIN verification
+4. **Sign Count Validation** - Detects cloned authenticators
+5. **One-time Challenges** - Prevents replay attacks
+6. **Challenge Expiration** - 5-minute TTL for challenges
+
+### Best Practices Implemented
+
+- SecureRandom for challenge generation (32 bytes)
+- HTTPS required in production (rpId must match domain)
+- No password storage - only public keys stored
+- Audit logging for all authentication attempts
+
+## Documentation
+
+- [Architecture Guide](docs/ARCHITECTURE.md) - Detailed system architecture
+- [API Reference](docs/API.md) - Complete API documentation
+- [Database Schema](docs/DATABASE.md) - Database design
+
+## Development
+
+### Build
+
+```bash
+./mvnw clean package -DskipTests
+```
+
+### Run Tests
+
+```bash
+./mvnw test
+```
+
+### Code Structure
+
+| Layer | Responsibility |
+|-------|----------------|
+| Controller | HTTP handling, request/response mapping |
+| Use Case | Business logic, orchestration |
+| Domain | Entities, value objects, business rules |
+| Repository | Data access |
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"WebAuthn not supported"** - Use a modern browser (Chrome, Firefox, Safari, Edge)
+2. **"Challenge expired"** - Complete registration within 5 minutes
+3. **"Origin mismatch"** - Ensure frontend origin matches `web-authn.origin` config
+4. **"User verification failed"** - Enable biometrics on your device
+
+### Debug Mode
+
+Enable debug logging:
+
+```yaml
+logging:
+  level:
+    com.leonard.web_authn: DEBUG
+```
+
+## License
+
+MIT License
+
+## Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn compile:*)",
+      "Bash(./mvnw spring-boot:run:*)",
+      "Bash(java -version:*)",
+      "Bash(echo:*)",
+      "Bash(/usr/libexec/java_home:*)",
+      "Bash(./mvnw clean compile:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs:*)",
+      "Bash(./mvnw compile:*)",
+      "Bash(curl:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}
