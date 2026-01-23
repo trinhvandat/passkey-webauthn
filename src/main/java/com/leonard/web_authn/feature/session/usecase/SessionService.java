@@ -4,6 +4,7 @@ import com.leonard.web_authn.feature.session.adapter.repository.UserSessionRepos
 import com.leonard.web_authn.feature.session.domain.UserSession;
 import com.leonard.web_authn.feature.session.domain.exception.InvalidRefreshTokenException;
 import com.leonard.web_authn.feature.session.domain.exception.SessionExpiredException;
+import com.leonard.web_authn.feature.authorization.usecase.AuthorizationService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -19,10 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.Base64;
-import java.util.Date;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 @Slf4j
@@ -32,15 +30,18 @@ public class SessionService {
     private static final int REFRESH_TOKEN_VALIDITY_DAYS = 7;
 
     private final UserSessionRepository userSessionRepository;
+    private final AuthorizationService authorizationService;
     private final BCryptPasswordEncoder passwordEncoder;
     private final SecureRandom secureRandom;
     private final SecretKey jwtKey;
 
     public SessionService(
             UserSessionRepository userSessionRepository,
+            AuthorizationService authorizationService,
             @Value("${jwt.secret:defaultSecretKeyForDevelopmentOnlyMustBeAtLeast256Bits}") String jwtSecret
     ) {
         this.userSessionRepository = userSessionRepository;
+        this.authorizationService = authorizationService;
         this.passwordEncoder = new BCryptPasswordEncoder();
         this.secureRandom = new SecureRandom();
         this.jwtKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
@@ -170,9 +171,13 @@ public class SessionService {
         Date now = new Date();
         Date expiration = new Date(now.getTime() + ACCESS_TOKEN_VALIDITY_SECONDS * 1000L);
 
+        AuthorizationService.UserAuthContext authContext = authorizationService.buildAuthContext(userId);
+
         return Jwts.builder()
                 .subject(userId)
                 .claim("sessionId", sessionId)
+                .claim("roles", new ArrayList<>(authContext.roles()))
+                .claim("permissions", new ArrayList<>(authContext.permissions()))
                 .issuedAt(now)
                 .expiration(expiration)
                 .signWith(jwtKey)

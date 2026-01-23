@@ -287,3 +287,115 @@ export async function getAuthLogs(page = 0, size = 20, success = null) {
   const result = await response.json();
   return result.data;
 }
+
+// Role Management API (Admin)
+export async function getMyRoles() {
+  const response = await authFetch(`${API_BASE}/admin/roles/me`);
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to get roles');
+  }
+  const result = await response.json();
+  return result.data;
+}
+
+export async function listAllRoles() {
+  const response = await authFetch(`${API_BASE}/admin/roles`);
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to list roles');
+  }
+  const result = await response.json();
+  return result.data;
+}
+
+export async function getUserRoles(userId) {
+  const response = await authFetch(`${API_BASE}/admin/roles/users/${encodeURIComponent(userId)}`);
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to get user roles');
+  }
+  const result = await response.json();
+  return result.data;
+}
+
+export async function assignRole(userId, roleId) {
+  const response = await authFetch(`${API_BASE}/admin/roles/users/${encodeURIComponent(userId)}`, {
+    method: 'POST',
+    body: JSON.stringify({ role_id: roleId })
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to assign role');
+  }
+}
+
+export async function revokeRole(userId, roleId, reason) {
+  const response = await authFetch(`${API_BASE}/admin/roles/users/${encodeURIComponent(userId)}/roles/${roleId}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ reason })
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to revoke role');
+  }
+}
+
+// OAuth API
+export async function getEnabledOAuthProviders() {
+  const response = await fetch(`${API_BASE}/oauth/providers`);
+  if (!response.ok) return { providers: [] };
+  const result = await response.json();
+  return result.data;
+}
+
+export async function startOAuthAuthorization(provider) {
+  const { accessToken: token } = getTokens();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(`${API_BASE}/oauth/${provider}/authorize`, {
+    method: 'POST',
+    headers
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to start OAuth');
+  }
+  const result = await response.json();
+  return result.data;
+}
+
+export async function handleOAuthCallback(provider, code, state) {
+  const response = await fetch(`${API_BASE}/oauth/${provider}/callback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, state })
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'OAuth login failed');
+  }
+  const result = await response.json();
+  return result.data;
+}
+
+export async function getAuthMethods() {
+  const response = await authFetch(`${API_BASE}/oauth/methods`);
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to get auth methods');
+  }
+  const result = await response.json();
+  return result.data;
+}
+
+export async function unlinkOAuthProvider(provider) {
+  const response = await authFetch(`${API_BASE}/oauth/${provider}/unlink`, {
+    method: 'DELETE'
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to unlink provider');
+  }
+}

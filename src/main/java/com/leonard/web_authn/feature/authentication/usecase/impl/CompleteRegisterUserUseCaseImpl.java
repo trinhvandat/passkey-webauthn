@@ -2,6 +2,10 @@ package com.leonard.web_authn.feature.authentication.usecase.impl;
 
 import com.leonard.web_authn.feature.authentication.usecase.CompleteRegisterUserUseCase;
 import com.leonard.web_authn.feature.authentication.usecase.command.CompleteRegisterCommand;
+import com.leonard.web_authn.feature.authorization.adapter.repository.RoleRepository;
+import com.leonard.web_authn.feature.authorization.adapter.repository.UserRoleRepository;
+import com.leonard.web_authn.feature.authorization.domain.Role;
+import com.leonard.web_authn.feature.authorization.domain.UserRole;
 import com.leonard.web_authn.feature.passkey.adapter.repository.PasskeyChallengeRepository;
 import com.leonard.web_authn.feature.passkey.adapter.repository.PasskeyCredentialRepository;
 import com.leonard.web_authn.feature.passkey.config.WebAuthnProperties;
@@ -58,6 +62,8 @@ public class CompleteRegisterUserUseCaseImpl implements CompleteRegisterUserUseC
     private final PasskeyChallengeRepository passkeyChallengeRepository;
     private final PasskeyCredentialRepository passkeyCredentialRepository;
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final UserRoleRepository userRoleRepository;
     private final WebAuthnProperties webAuthnProperties;
     private final ObjectConverter objectConverter;
 
@@ -251,7 +257,22 @@ public class CompleteRegisterUserUseCaseImpl implements CompleteRegisterUserUseC
                 .updatedAt(LocalDateTime.now())
                 .build();
 
-        return userRepository.save(user);
+        User savedUser = userRepository.save(user);
+        assignDefaultRole(savedUser.getId());
+        return savedUser;
+    }
+
+    private void assignDefaultRole(String userId) {
+        roleRepository.findByName("USER").ifPresent(role -> {
+            UserRole userRole = UserRole.builder()
+                    .userId(userId)
+                    .roleId(role.getId())
+                    .assignedBy("SYSTEM")
+                    .assignedAt(LocalDateTime.now())
+                    .build();
+            userRoleRepository.save(userRole);
+            log.info("Assigned default USER role to user: {}", userId);
+        });
     }
 
     private void saveCredential(RegistrationData registrationData, String userId, List<String> transports) {

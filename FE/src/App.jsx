@@ -7,11 +7,15 @@ import {
   isWebAuthnSupported
 } from './webauthn';
 import { setTokens, setUserId, clearTokens, getUserId, getTokens } from './api';
+import { decodeToken, isAdmin } from './auth';
 import PasskeyManager from './components/PasskeyManager';
 import RecoveryCodes from './components/RecoveryCodes';
 import SessionManager from './components/SessionManager';
 import RecoveryLogin from './components/RecoveryLogin';
 import AuthLogs from './components/AuthLogs';
+import AdminPanel from './components/AdminPanel';
+import AccountLinking from './components/AccountLinking';
+import OAuthButtons from './components/OAuthButtons';
 
 function App() {
   const [activeTab, setActiveTab] = useState('register');
@@ -213,6 +217,20 @@ function App() {
             >
               📋 Logs
             </button>
+            <button
+              className={`settings-tab ${activeSettingsTab === 'auth-methods' ? 'active' : ''}`}
+              onClick={() => setActiveSettingsTab('auth-methods')}
+            >
+              🔗 Auth Methods
+            </button>
+            {isAdmin(getTokens().accessToken) && (
+              <button
+                className={`settings-tab ${activeSettingsTab === 'admin' ? 'active' : ''}`}
+                onClick={() => setActiveSettingsTab('admin')}
+              >
+                ⚙️ Admin
+              </button>
+            )}
           </div>
 
           <div className="settings-content">
@@ -227,6 +245,12 @@ function App() {
             )}
             {activeSettingsTab === 'logs' && (
               <AuthLogs onMessage={showMessage} />
+            )}
+            {activeSettingsTab === 'auth-methods' && (
+              <AccountLinking />
+            )}
+            {activeSettingsTab === 'admin' && isAdmin(getTokens().accessToken) && (
+              <AdminPanel />
             )}
           </div>
 
@@ -313,6 +337,7 @@ function App() {
                   {loading ? <span className="loading"></span> : 'Login with Passkey'}
                 </button>
               </form>
+              <OAuthButtons />
               <button
                 className="btn-link recovery-link"
                 onClick={() => setShowRecoveryLogin(true)}

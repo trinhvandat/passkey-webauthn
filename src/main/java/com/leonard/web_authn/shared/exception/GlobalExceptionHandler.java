@@ -1,5 +1,6 @@
 package com.leonard.web_authn.shared.exception;
 
+import com.leonard.web_authn.feature.authorization.domain.exception.AccessDeniedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -43,6 +44,17 @@ public class GlobalExceptionHandler {
                 .timestamp(LocalDateTime.now())
                 .build();
         return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDeniedException(AccessDeniedException ex) {
+        log.warn("Access denied: {}", ex.getMessage());
+        ErrorResponse response = ErrorResponse.builder()
+                .code(ErrorCode.ACCESS_DENIED.getCode())
+                .message(ex.getMessage())
+                .timestamp(LocalDateTime.now())
+                .build();
+        return ResponseEntity.status(403).body(response);
     }
 
     @ExceptionHandler(IllegalStateException.class)
