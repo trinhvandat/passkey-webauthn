@@ -10,5 +10,6 @@ public class AuthenticationResult {
     private String username;
     private String email;
     private String displayName;
+    private String credentialId;
     private boolean verified;
 }

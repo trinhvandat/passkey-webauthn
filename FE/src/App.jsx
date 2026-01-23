@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   startRegistration,
   completeRegistration,
@@ -6,12 +6,21 @@ import {
   completeAuthentication,
   isWebAuthnSupported
 } from './webauthn';
+import { setTokens, setUserId, clearTokens, getUserId, getTokens } from './api';
+import PasskeyManager from './components/PasskeyManager';
+import RecoveryCodes from './components/RecoveryCodes';
+import SessionManager from './components/SessionManager';
+import RecoveryLogin from './components/RecoveryLogin';
+import AuthLogs from './components/AuthLogs';
 
 function App() {
   const [activeTab, setActiveTab] = useState('register');
+  const [activeSettingsTab, setActiveSettingsTab] = useState('passkeys');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [user, setUser] = useState(null);
+  const [showRecoveryLogin, setShowRecoveryLogin] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
 
   const [registerForm, setRegisterForm] = useState({
     username: '',
@@ -23,9 +32,20 @@ function App() {
     username: ''
   });
 
+  // Check for existing session on load
+  useEffect(() => {
+    const userId = getUserId();
+    const { accessToken } = getTokens();
+    if (userId && accessToken) {
+      // Could validate token here if needed
+    }
+  }, []);
+
   const showMessage = (type, text) => {
     setMessage({ type, text });
-    setTimeout(() => setMessage(null), 5000);
+    if (type !== 'info') {
+      setTimeout(() => setMessage(null), 5000);
+    }
   };
 
   const handleRegister = async (e) => {
@@ -79,7 +99,31 @@ function App() {
       showMessage('info', 'Please verify with your passkey...');
       const result = await completeAuthentication(options);
 
-      setUser(result);
+      // Store tokens from authentication response - MUST be done before setting user state
+      // This ensures userId is in localStorage before child components mount and fetch data
+      // Handle both camelCase and snake_case field names for compatibility
+      const accessToken = result.access_token || result.accessToken;
+      const refreshToken = result.refresh_token || result.refreshToken;
+      const userId = result.user_id || result.userId;
+      const currentSessionId = result.session_id || result.sessionId;
+
+      if (accessToken) {
+        setTokens(accessToken, refreshToken);
+        setUserId(userId);
+      }
+
+      // Set React state after localStorage is populated
+      setSessionId(currentSessionId);
+
+      // Normalize user object for consistent display
+      const normalizedUser = {
+        user_id: userId,
+        username: result.username,
+        email: result.email,
+        display_name: result.display_name || result.displayName,
+        verified: result.verified
+      };
+      setUser(normalizedUser);
       showMessage('success', 'Authentication successful! Welcome back!');
       setLoginForm({ username: '' });
     } catch (error) {
@@ -90,8 +134,15 @@ function App() {
     }
   };
 
+  const handleRecoveryLogin = (userData) => {
+    setUser(userData);
+    setShowRecoveryLogin(false);
+  };
+
   const handleLogout = () => {
+    clearTokens();
     setUser(null);
+    setSessionId(null);
     showMessage('info', 'Logged out successfully');
   };
 
@@ -106,19 +157,80 @@ function App() {
     );
   }
 
+  // Recovery login mode
+  if (showRecoveryLogin) {
+    return (
+      <div className="container">
+        <RecoveryLogin
+          onLoginSuccess={handleRecoveryLogin}
+          onMessage={showMessage}
+          onBack={() => setShowRecoveryLogin(false)}
+        />
+        {message && (
+          <div className={`message ${message.type}`}>
+            {message.text}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="container">
       <h1>WebAuthn Passkey Demo</h1>
 
       {user ? (
-        <div>
+        <div className="dashboard">
           <div className="user-info">
             <p><strong>User ID:</strong> {user.user_id}</p>
             <p><strong>Username:</strong> {user.username}</p>
             <p><strong>Email:</strong> {user.email}</p>
             <p><strong>Display Name:</strong> {user.display_name || '-'}</p>
           </div>
-          <button className="submit" onClick={handleLogout} style={{ marginTop: '1rem' }}>
+
+          <div className="settings-tabs">
+            <button
+              className={`settings-tab ${activeSettingsTab === 'passkeys' ? 'active' : ''}`}
+              onClick={() => setActiveSettingsTab('passkeys')}
+            >
+              🔐 Passkeys
+            </button>
+            <button
+              className={`settings-tab ${activeSettingsTab === 'recovery' ? 'active' : ''}`}
+              onClick={() => setActiveSettingsTab('recovery')}
+            >
+              🔑 Recovery
+            </button>
+            <button
+              className={`settings-tab ${activeSettingsTab === 'sessions' ? 'active' : ''}`}
+              onClick={() => setActiveSettingsTab('sessions')}
+            >
+              📱 Sessions
+            </button>
+            <button
+              className={`settings-tab ${activeSettingsTab === 'logs' ? 'active' : ''}`}
+              onClick={() => setActiveSettingsTab('logs')}
+            >
+              📋 Logs
+            </button>
+          </div>
+
+          <div className="settings-content">
+            {activeSettingsTab === 'passkeys' && (
+              <PasskeyManager onMessage={showMessage} />
+            )}
+            {activeSettingsTab === 'recovery' && (
+              <RecoveryCodes onMessage={showMessage} />
+            )}
+            {activeSettingsTab === 'sessions' && (
+              <SessionManager currentSessionId={sessionId} onMessage={showMessage} />
+            )}
+            {activeSettingsTab === 'logs' && (
+              <AuthLogs onMessage={showMessage} />
+            )}
+          </div>
+
+          <button className="submit logout-btn" onClick={handleLogout} style={{ marginTop: '1rem' }}>
             Logout
           </button>
         </div>
@@ -183,23 +295,31 @@ function App() {
           )}
 
           {activeTab === 'login' && (
-            <form onSubmit={handleLogin}>
-              <div className="form-group">
-                <label htmlFor="login-username">Username or Email</label>
-                <input
-                  id="login-username"
-                  type="text"
-                  value={loginForm.username}
-                  onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
-                  required
-                  disabled={loading}
-                  placeholder="Enter username or email"
-                />
-              </div>
-              <button type="submit" className="submit" disabled={loading}>
-                {loading ? <span className="loading"></span> : 'Login with Passkey'}
+            <>
+              <form onSubmit={handleLogin}>
+                <div className="form-group">
+                  <label htmlFor="login-username">Username or Email</label>
+                  <input
+                    id="login-username"
+                    type="text"
+                    value={loginForm.username}
+                    onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                    required
+                    disabled={loading}
+                    placeholder="Enter username or email"
+                  />
+                </div>
+                <button type="submit" className="submit" disabled={loading}>
+                  {loading ? <span className="loading"></span> : 'Login with Passkey'}
+                </button>
+              </form>
+              <button
+                className="btn-link recovery-link"
+                onClick={() => setShowRecoveryLogin(true)}
+              >
+                Lost your passkey? Use a recovery code
               </button>
-            </form>
+            </>
           )}
         </>
       )}

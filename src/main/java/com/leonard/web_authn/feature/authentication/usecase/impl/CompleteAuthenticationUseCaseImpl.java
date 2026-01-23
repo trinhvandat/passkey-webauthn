@@ -173,6 +173,7 @@ public class CompleteAuthenticationUseCaseImpl implements CompleteAuthentication
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .displayName(user.getDisplayName())
+                .credentialId(credential.getId())
                 .verified(true)
                 .build();
     }

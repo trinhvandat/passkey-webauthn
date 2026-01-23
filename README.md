@@ -21,12 +21,37 @@ This project implements passwordless authentication using the WebAuthn (Web Auth
 
 ## Features
 
+### Core Authentication
 - **Passwordless Registration** - Register users with passkeys (biometrics/security keys)
-- **Passwordless Authentication** - Login using registered passkeys
+- **Passwordless Authentication** - Login using registered passkeys with JWT session tokens
 - **Multi-device Support** - Support for platform authenticators and roaming authenticators
-- **Replay Attack Prevention** - One-time challenge usage with expiration
+
+### Security
+- **Replay Attack Prevention** - One-time challenge usage with atomic validation
 - **Cloned Authenticator Detection** - Sign count validation to detect credential cloning
-- **Audit Logging** - Complete authentication attempt logging
+- **Rate Limiting** - Brute force protection with progressive lockouts
+- **Account Locking** - Automatic and manual account lock/unlock
+
+### Passkey Management
+- **Multi-Passkey Support** - Register multiple passkeys per account
+- **Passkey Listing** - View all registered passkeys with details
+- **Device Naming** - Rename passkeys for easy identification
+- **Passkey Revocation** - Remove individual or all passkeys
+
+### Account Recovery
+- **Recovery Codes** - 8 one-time backup codes for account recovery
+- **Email Recovery** - Recover account via email verification
+- **Emergency Lock** - Self-lock account if compromised
+
+### Session Management
+- **JWT Tokens** - Access tokens (15min) + Refresh tokens (7 days)
+- **Active Sessions** - View and manage all active sessions
+- **Remote Logout** - Revoke sessions from other devices
+
+### Audit & Monitoring
+- **Authentication Logs** - Complete audit trail with IP and location
+- **Security Alerts** - Sign count anomaly detection
+- **Login Attempt Tracking** - Rate limiting data for analysis
 
 ## Tech Stack
 
@@ -96,12 +121,47 @@ Frontend runs on http://localhost:3000
 
 ## API Endpoints
 
+### Authentication
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/v1/auth/register:start` | Start passkey registration |
 | POST | `/api/v1/auth/register:complete` | Complete passkey registration |
 | POST | `/api/v1/auth/authenticate:start` | Start passkey authentication |
 | POST | `/api/v1/auth/authenticate:complete` | Complete passkey authentication |
+
+### Passkey Management (Requires Auth)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/passkeys` | List all passkeys |
+| GET | `/api/v1/passkeys/{id}` | Get passkey details |
+| PUT | `/api/v1/passkeys/{id}` | Rename passkey |
+| DELETE | `/api/v1/passkeys/{id}` | Revoke passkey |
+| POST | `/api/v1/passkeys:add-start` | Start adding new passkey |
+| POST | `/api/v1/passkeys:add-complete` | Complete adding passkey |
+| POST | `/api/v1/passkeys:revoke-all` | Revoke all passkeys |
+
+### Recovery
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/recovery/codes:generate` | Generate recovery codes |
+| GET | `/api/v1/recovery/codes:status` | Check recovery codes status |
+| POST | `/api/v1/recovery:initiate` | Start account recovery |
+| POST | `/api/v1/recovery:complete` | Complete account recovery |
+
+### Session Management (Requires Auth)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/sessions` | List active sessions |
+| DELETE | `/api/v1/sessions/{id}` | Revoke session |
+| POST | `/api/v1/sessions:revoke-others` | Revoke all other sessions |
+| POST | `/api/v1/sessions:refresh` | Refresh access token |
+
+### Security (Requires Auth)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/security/account:lock` | Lock account |
+| POST | `/api/v1/security/account:unlock` | Unlock account |
+| GET | `/api/v1/security/auth-logs` | Get authentication history |
 
 ### Example: Start Registration
 
@@ -203,6 +263,19 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture docum
 - HTTPS required in production (rpId must match domain)
 - No password storage - only public keys stored
 - Audit logging for all authentication attempts
+- Atomic challenge validation (prevents race conditions)
+- TOCTOU protection for user registration
+- Input length validation (prevents DoS)
+- BCrypt for recovery code hashing
+- JWT with short-lived access tokens
+
+### Rate Limiting Rules
+
+| Condition | Action |
+|-----------|--------|
+| 5 failed attempts in 15 min (same IP) | Block IP for 15 minutes |
+| 10 failed attempts in 1 hour (same user) | Lock account |
+| 20 failed attempts in 1 hour (same IP) | Block IP for 24 hours |
 
 ## Documentation
 

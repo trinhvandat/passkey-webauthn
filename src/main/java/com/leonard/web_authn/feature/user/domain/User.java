@@ -33,6 +33,16 @@ public class User {
     @Column(name = "is_email_verified")
     private Boolean isEmailVerified;
 
+    @Column(name = "is_locked", nullable = false)
+    @Builder.Default
+    private Boolean isLocked = false;
+
+    @Column(name = "locked_at")
+    private LocalDateTime lockedAt;
+
+    @Column(name = "lock_reason")
+    private String lockReason;
+
     @Column(name = "created_at", nullable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

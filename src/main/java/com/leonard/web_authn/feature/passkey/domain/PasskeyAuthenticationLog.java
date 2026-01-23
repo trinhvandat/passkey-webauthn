@@ -7,7 +7,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
-import java.net.InetAddress;
 import java.time.LocalDateTime;
 
 @Entity
@@ -48,8 +47,8 @@ public class PasskeyAuthenticationLog {
     @Builder.Default
     private Boolean signCountAnomaly = false;
 
-    @Column(name = "ip_address", columnDefinition = "inet")
-    private InetAddress ipAddress;
+    @Column(name = "ip_address", length = 45)
+    private String ipAddress;
 
     @Column(name = "user_agent", columnDefinition = "TEXT")
     private String userAgent;

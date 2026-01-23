@@ -24,7 +24,7 @@ export async function startRegistration(username, displayName, email) {
   const response = await fetch(`${API_BASE}/register:start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, displayName, email })
+    body: JSON.stringify({ username, display_name: displayName, email })
   });
 
   if (!response.ok) {
@@ -88,12 +88,12 @@ export async function completeRegistration(username, displayName, email, options
 
   const credentialResponse = {
     username,
-    displayName,
+    display_name: displayName,
     email,
-    credentialId: bufferToBase64Url(credential.rawId),
-    rawId: bufferToBase64Url(credential.rawId),
-    clientDataJSON: bufferToBase64Url(credential.response.clientDataJSON),
-    attestationObject: bufferToBase64Url(credential.response.attestationObject),
+    credential_id: bufferToBase64Url(credential.rawId),
+    raw_id: bufferToBase64Url(credential.rawId),
+    client_data_json: bufferToBase64Url(credential.response.clientDataJSON),
+    attestation_object: bufferToBase64Url(credential.response.attestationObject),
     transports: credential.response.getTransports ? credential.response.getTransports() : []
   };
 
@@ -149,12 +149,12 @@ export async function completeAuthentication(options) {
   });
 
   const assertionResponse = {
-    credentialId: bufferToBase64Url(assertion.rawId),
-    rawId: bufferToBase64Url(assertion.rawId),
-    clientDataJSON: bufferToBase64Url(assertion.response.clientDataJSON),
-    authenticatorData: bufferToBase64Url(assertion.response.authenticatorData),
+    credential_id: bufferToBase64Url(assertion.rawId),
+    raw_id: bufferToBase64Url(assertion.rawId),
+    client_data_json: bufferToBase64Url(assertion.response.clientDataJSON),
+    authenticator_data: bufferToBase64Url(assertion.response.authenticatorData),
     signature: bufferToBase64Url(assertion.response.signature),
-    userHandle: assertion.response.userHandle
+    user_handle: assertion.response.userHandle
       ? bufferToBase64Url(assertion.response.userHandle)
       : null
   };
@@ -176,4 +176,61 @@ export async function completeAuthentication(options) {
 
 export function isWebAuthnSupported() {
   return window.PublicKeyCredential !== undefined;
+}
+
+export async function createPasskeyCredential(options) {
+  // Handle both camelCase and snake_case responses
+  const pubKeyCredParams = options.pubKeyCredParams || options.pub_key_cred_params;
+  const authenticatorSelection = options.authenticatorSelection || options.authenticator_selection;
+  const excludeCredentials = options.excludeCredentials || options.exclude_credentials;
+
+  const publicKeyCredentialCreationOptions = {
+    challenge: base64UrlToBuffer(options.challenge),
+    rp: {
+      name: options.rp.name,
+      id: options.rp.id
+    },
+    user: {
+      id: new TextEncoder().encode(options.user.id),
+      name: options.user.name,
+      displayName: options.user.displayName || options.user.display_name
+    },
+    pubKeyCredParams: pubKeyCredParams.map(param => ({
+      type: param.type,
+      alg: param.alg
+    })),
+    timeout: options.timeout,
+    attestation: options.attestation || 'none'
+  };
+
+  if (authenticatorSelection) {
+    const authAttachment = authenticatorSelection.authenticatorAttachment || authenticatorSelection.authenticator_attachment;
+    publicKeyCredentialCreationOptions.authenticatorSelection = {
+      residentKey: authenticatorSelection.residentKey || authenticatorSelection.resident_key || 'preferred',
+      userVerification: authenticatorSelection.userVerification || authenticatorSelection.user_verification || 'required'
+    };
+    if (authAttachment && authAttachment !== '') {
+      publicKeyCredentialCreationOptions.authenticatorSelection.authenticatorAttachment = authAttachment;
+    }
+  }
+
+  if (excludeCredentials && excludeCredentials.length > 0) {
+    publicKeyCredentialCreationOptions.excludeCredentials = excludeCredentials.map(cred => ({
+      type: cred.type,
+      id: base64UrlToBuffer(cred.id),
+      transports: cred.transports
+    }));
+  }
+
+  const credential = await navigator.credentials.create({
+    publicKey: publicKeyCredentialCreationOptions
+  });
+
+  return {
+    credential_id: bufferToBase64Url(credential.rawId),
+    raw_id: bufferToBase64Url(credential.rawId),
+    client_data_json: bufferToBase64Url(credential.response.clientDataJSON),
+    attestation_object: bufferToBase64Url(credential.response.attestationObject),
+    transports: credential.response.getTransports ? credential.response.getTransports() : []
+  };
 }

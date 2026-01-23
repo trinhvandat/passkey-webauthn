@@ -11,6 +11,9 @@ erDiagram
     users ||--o{ passkey_credentials : "has many"
     users ||--o{ passkey_challenges : "creates"
     users ||--o{ passkey_authentication_logs : "generates"
+    users ||--o{ recovery_codes : "has many"
+    users ||--o{ user_sessions : "has many"
+    users ||--o{ login_attempts : "tracks"
     passkey_credentials ||--o{ passkey_authentication_logs : "used in"
 
     users {
@@ -20,6 +23,9 @@ erDiagram
         varchar(255) display_name "Display name for UI"
         boolean is_active "Account active status"
         boolean is_email_verified "Email verification flag"
+        boolean is_locked "Account locked status"
+        timestamp locked_at "When account was locked"
+        varchar(100) lock_reason "Reason for lock"
         timestamp created_at "Account creation time"
         timestamp updated_at "Last update time"
         timestamp last_login_at "Last successful login"
@@ -50,7 +56,7 @@ erDiagram
         bigserial id PK "Auto-increment ID"
         varchar(255) challenge UK "Base64URL challenge"
         varchar(255) user_id "User ID (nullable for reg)"
-        varchar(20) operation_type "REGISTRATION or AUTHENTICATION"
+        varchar(20) operation_type "REGISTRATION, AUTHENTICATION, or ADD_CREDENTIAL"
         varchar(255) session_id "Session tracking ID"
         inet ip_address "Client IP address"
         text user_agent "Client user agent"
@@ -76,6 +82,42 @@ erDiagram
         varchar(255) city "City name"
         timestamp created_at "Log entry time"
     }
+
+    recovery_codes {
+        bigserial id PK "Auto-increment ID"
+        varchar(255) user_id FK "References users.id"
+        varchar(255) code_hash UK "Hashed recovery code"
+        boolean is_used "One-time use flag"
+        timestamp used_at "When code was used"
+        inet used_from_ip "IP when used"
+        timestamp created_at "Code creation time"
+        timestamp expires_at "Code expiration"
+    }
+
+    user_sessions {
+        varchar(255) id PK "Session UUID"
+        varchar(255) user_id FK "References users.id"
+        varchar(255) credential_id FK "Credential used to authenticate"
+        varchar(500) refresh_token_hash "Hashed refresh token"
+        inet ip_address "Session IP"
+        text user_agent "Session user agent"
+        varchar(255) device_info "Device description"
+        boolean is_active "Session active status"
+        timestamp created_at "Session start time"
+        timestamp last_activity_at "Last activity"
+        timestamp expires_at "Session expiration"
+        timestamp revoked_at "When revoked"
+        varchar(100) revoke_reason "Reason for revocation"
+    }
+
+    login_attempts {
+        bigserial id PK "Auto-increment ID"
+        varchar(255) identifier "Username or email attempted"
+        inet ip_address "Attempt IP"
+        boolean success "Attempt success"
+        varchar(100) failure_reason "Reason if failed"
+        timestamp created_at "Attempt time"
+    }
 ```
 
 ---
@@ -94,6 +136,9 @@ CREATE TABLE users (
     display_name VARCHAR(255) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
     is_email_verified BOOLEAN NOT NULL DEFAULT false,
+    is_locked BOOLEAN NOT NULL DEFAULT false,
+    locked_at TIMESTAMP,
+    lock_reason VARCHAR(100),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMP,
@@ -204,7 +249,7 @@ CREATE TABLE passkey_challenges (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT passkey_challenges_operation_type_valid
-        CHECK (operation_type IN ('REGISTRATION', 'AUTHENTICATION')),
+        CHECK (operation_type IN ('REGISTRATION', 'AUTHENTICATION', 'ADD_CREDENTIAL')),
 
     CONSTRAINT passkey_challenges_expires_at_future
         CHECK (expires_at > created_at)
@@ -268,6 +313,135 @@ CREATE TABLE passkey_authentication_logs (
 | `idx_passkey_auth_logs_success` | success | Success/failure filter |
 | `idx_passkey_auth_logs_anomaly` | sign_count_anomaly (partial) | Security alerts |
 | `idx_passkey_auth_logs_ip` | ip_address | IP-based analysis |
+
+---
+
+### 5. recovery_codes
+
+Backup codes for account recovery when all passkeys are lost.
+
+```sql
+CREATE TABLE recovery_codes (
+    id BIGSERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    code_hash VARCHAR(255) NOT NULL UNIQUE,
+    is_used BOOLEAN NOT NULL DEFAULT false,
+    used_at TIMESTAMP,
+    used_from_ip INET,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP,
+
+    CONSTRAINT fk_recovery_codes_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+```
+
+#### Security Notes
+
+- **Code Format**: 8 codes, each 8 alphanumeric characters (e.g., `ABCD-1234`)
+- **Storage**: Codes are hashed with bcrypt before storage
+- **One-time use**: Each code can only be used once
+- **Regeneration**: User can regenerate all codes (invalidates previous)
+
+#### Indexes
+
+| Name | Columns | Purpose |
+|------|---------|---------|
+| `idx_recovery_codes_user_id` | user_id | User's codes lookup |
+| `idx_recovery_codes_code_hash` | code_hash | Code verification |
+| `idx_recovery_codes_user_unused` | user_id, is_used | Find unused codes |
+
+---
+
+### 6. user_sessions
+
+JWT session tracking for authenticated users.
+
+```sql
+CREATE TABLE user_sessions (
+    id VARCHAR(255) PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    credential_id VARCHAR(255),
+    refresh_token_hash VARCHAR(500),
+    ip_address INET,
+    user_agent TEXT,
+    device_info VARCHAR(255),
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_activity_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP,
+    revoke_reason VARCHAR(100),
+
+    CONSTRAINT fk_user_sessions_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_user_sessions_credential
+        FOREIGN KEY (credential_id)
+        REFERENCES passkey_credentials(id)
+        ON DELETE SET NULL
+);
+```
+
+#### Session Lifecycle
+
+```
+┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
+│ Created │───▶│ Active  │───▶│ Expired │───▶│ Cleaned │
+└─────────┘    └────┬────┘    └─────────┘    └─────────┘
+                    │
+                    ▼
+              ┌─────────┐
+              │ Revoked │
+              └─────────┘
+```
+
+#### Indexes
+
+| Name | Columns | Purpose |
+|------|---------|---------|
+| `idx_user_sessions_user_id` | user_id | User's sessions |
+| `idx_user_sessions_refresh_token` | refresh_token_hash | Token lookup |
+| `idx_user_sessions_active` | user_id, is_active | Active sessions |
+| `idx_user_sessions_expires` | expires_at | Cleanup job |
+
+---
+
+### 7. login_attempts
+
+Rate limiting and brute force protection tracking.
+
+```sql
+CREATE TABLE login_attempts (
+    id BIGSERIAL PRIMARY KEY,
+    identifier VARCHAR(255) NOT NULL,
+    ip_address INET NOT NULL,
+    success BOOLEAN NOT NULL DEFAULT false,
+    failure_reason VARCHAR(100),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### Rate Limiting Rules
+
+| Condition | Action |
+|-----------|--------|
+| 5 failed attempts in 15 min (same IP) | Block IP for 15 minutes |
+| 10 failed attempts in 1 hour (same username) | Lock account, require email verification |
+| 20 failed attempts in 1 hour (same IP) | Block IP for 24 hours |
+
+#### Indexes
+
+| Name | Columns | Purpose |
+|------|---------|---------|
+| `idx_login_attempts_identifier` | identifier | Username/email lookup |
+| `idx_login_attempts_ip` | ip_address | IP tracking |
+| `idx_login_attempts_created` | created_at | Time-based queries |
+| `idx_login_attempts_ip_time` | ip_address, created_at | Rate limiting |
 
 ---
 
@@ -348,12 +522,121 @@ CREATE TRIGGER trigger_users_updated_at
 
 ---
 
+### cleanup_expired_sessions()
+
+Removes expired sessions (run via cron job).
+
+```sql
+CREATE OR REPLACE FUNCTION cleanup_expired_sessions()
+RETURNS INTEGER AS $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    DELETE FROM user_sessions
+    WHERE expires_at < CURRENT_TIMESTAMP
+       OR (revoked_at IS NOT NULL AND revoked_at < CURRENT_TIMESTAMP - INTERVAL '7 days');
+
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Recommended cron:** Every hour
+
+---
+
+### cleanup_old_login_attempts()
+
+Removes old login attempt records (run via cron job).
+
+```sql
+CREATE OR REPLACE FUNCTION cleanup_old_login_attempts()
+RETURNS INTEGER AS $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    DELETE FROM login_attempts
+    WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '7 days';
+
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Recommended cron:** Daily
+
+---
+
+### check_rate_limit()
+
+Check if IP or identifier is rate limited.
+
+```sql
+CREATE OR REPLACE FUNCTION check_rate_limit(
+    p_identifier VARCHAR(255),
+    p_ip_address INET
+)
+RETURNS TABLE (
+    is_blocked BOOLEAN,
+    block_reason VARCHAR(100),
+    retry_after_seconds INTEGER
+) AS $$
+DECLARE
+    ip_failures_15min INTEGER;
+    identifier_failures_1h INTEGER;
+    ip_failures_1h INTEGER;
+BEGIN
+    -- Count failures in last 15 minutes for this IP
+    SELECT COUNT(*) INTO ip_failures_15min
+    FROM login_attempts
+    WHERE ip_address = p_ip_address
+      AND success = false
+      AND created_at > CURRENT_TIMESTAMP - INTERVAL '15 minutes';
+
+    -- Count failures in last hour for this identifier
+    SELECT COUNT(*) INTO identifier_failures_1h
+    FROM login_attempts
+    WHERE identifier = p_identifier
+      AND success = false
+      AND created_at > CURRENT_TIMESTAMP - INTERVAL '1 hour';
+
+    -- Count failures in last hour for this IP
+    SELECT COUNT(*) INTO ip_failures_1h
+    FROM login_attempts
+    WHERE ip_address = p_ip_address
+      AND success = false
+      AND created_at > CURRENT_TIMESTAMP - INTERVAL '1 hour';
+
+    -- Check rate limits
+    IF ip_failures_1h >= 20 THEN
+        RETURN QUERY SELECT true, 'IP blocked for 24 hours'::VARCHAR(100), 86400;
+    ELSIF identifier_failures_1h >= 10 THEN
+        RETURN QUERY SELECT true, 'Account locked - too many failed attempts'::VARCHAR(100), 3600;
+    ELSIF ip_failures_15min >= 5 THEN
+        RETURN QUERY SELECT true, 'Too many attempts - try again later'::VARCHAR(100), 900;
+    ELSE
+        RETURN QUERY SELECT false, NULL::VARCHAR(100), 0;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Usage:**
+```sql
+SELECT * FROM check_rate_limit('john_doe', '192.168.1.1');
+```
+
+---
+
 ## Migration History
 
 | Version | File | Description |
 |---------|------|-------------|
 | V1 | `V1__create_webauthn_tables.sql` | Initial schema |
 | V2 | `V2__fix_operation_type_constraints.sql` | Fix enum case, credential ID type |
+| V3 | `V3__add_recovery_and_session_tables.sql` | Add recovery codes, sessions, rate limiting |
 
 ---
 
@@ -437,6 +720,59 @@ ORDER BY date DESC;
 ```sql
 DELETE FROM passkey_challenges
 WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 hour';
+```
+
+### Get user's unused recovery codes count
+
+```sql
+SELECT COUNT(*)
+FROM recovery_codes
+WHERE user_id = 'user-uuid'
+  AND is_used = false
+  AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP);
+```
+
+### Get user's active sessions
+
+```sql
+SELECT
+    id,
+    ip_address,
+    user_agent,
+    device_info,
+    created_at,
+    last_activity_at
+FROM user_sessions
+WHERE user_id = 'user-uuid'
+  AND is_active = true
+  AND expires_at > CURRENT_TIMESTAMP
+ORDER BY last_activity_at DESC;
+```
+
+### Check failed login attempts for IP
+
+```sql
+SELECT
+    identifier,
+    COUNT(*) as attempt_count,
+    MAX(created_at) as last_attempt
+FROM login_attempts
+WHERE ip_address = '192.168.1.1'
+  AND success = false
+  AND created_at > CURRENT_TIMESTAMP - INTERVAL '1 hour'
+GROUP BY identifier
+ORDER BY attempt_count DESC;
+```
+
+### Revoke all user sessions
+
+```sql
+UPDATE user_sessions
+SET is_active = false,
+    revoked_at = CURRENT_TIMESTAMP,
+    revoke_reason = 'User initiated logout all'
+WHERE user_id = 'user-uuid'
+  AND is_active = true;
 ```
 
 ---

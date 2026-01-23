@@ -239,7 +239,10 @@ POST /api/v1/auth/authenticate:complete
     "username": "john_doe",
     "email": "john@example.com",
     "display_name": "John Doe",
-    "verified": true
+    "verified": true,
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4...",
+    "expires_in": 3600
   },
   "status": 200
 }
@@ -254,8 +257,612 @@ POST /api/v1/auth/authenticate:complete
 | 400 | ERR_000006 | Challenge already used |
 | 400 | ERR_000007 | Credential verification failed |
 | 400 | ERR_000010 | Sign count invalid (possible cloned authenticator) |
+| 403 | ERR_000014 | User account inactive |
 | 404 | ERR_000004 | Challenge not found |
 | 404 | ERR_000009 | Credential not found |
+| 429 | ERR_000020 | Too many attempts - rate limited |
+
+---
+
+## Passkey Management Endpoints
+
+> **Note:** All passkey management endpoints require authentication via `Authorization: Bearer <access_token>` header.
+
+### 5. List User Passkeys
+
+Get all passkeys registered for the authenticated user.
+
+```
+GET /api/v1/passkeys
+```
+
+#### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization` | Yes | Bearer token |
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "passkeys": [
+      {
+        "id": "cred-uuid-1",
+        "device_name": "iPhone 15 Pro",
+        "device_type": "platform",
+        "created_at": "2024-01-15T10:30:00Z",
+        "last_used_at": "2024-01-22T08:15:00Z",
+        "backup_eligible": true,
+        "backup_state": true,
+        "transports": ["internal", "hybrid"]
+      },
+      {
+        "id": "cred-uuid-2",
+        "device_name": "YubiKey 5",
+        "device_type": "cross-platform",
+        "created_at": "2024-01-20T14:00:00Z",
+        "last_used_at": "2024-01-21T09:00:00Z",
+        "backup_eligible": false,
+        "backup_state": false,
+        "transports": ["usb"]
+      }
+    ],
+    "total": 2
+  },
+  "status": 200
+}
+```
+
+---
+
+### 6. Get Passkey Details
+
+Get details of a specific passkey.
+
+```
+GET /api/v1/passkeys/{credentialId}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "id": "cred-uuid-1",
+    "device_name": "iPhone 15 Pro",
+    "device_type": "platform",
+    "algorithm": "ES256",
+    "sign_count": 42,
+    "created_at": "2024-01-15T10:30:00Z",
+    "last_used_at": "2024-01-22T08:15:00Z",
+    "backup_eligible": true,
+    "backup_state": true,
+    "transports": ["internal", "hybrid"],
+    "attestation_format": "none"
+  },
+  "status": 200
+}
+```
+
+---
+
+### 7. Update Passkey (Rename)
+
+Update passkey device name.
+
+```
+PUT /api/v1/passkeys/{credentialId}
+```
+
+#### Request Body
+
+```json
+{
+  "device_name": "My Work iPhone"
+}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "id": "cred-uuid-1",
+    "device_name": "My Work iPhone",
+    "updated_at": "2024-01-22T10:00:00Z"
+  },
+  "status": 200
+}
+```
+
+---
+
+### 8. Delete Passkey (Revoke)
+
+Revoke a specific passkey. Cannot delete last passkey unless recovery codes exist.
+
+```
+DELETE /api/v1/passkeys/{credentialId}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "message": "Passkey revoked successfully",
+    "remaining_passkeys": 1
+  },
+  "status": 200
+}
+```
+
+#### Error Responses
+
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | ERR_000021 | Cannot delete last passkey without recovery codes |
+| 404 | ERR_000009 | Credential not found |
+
+---
+
+### 9. Add New Passkey (Start)
+
+Start adding a new passkey to existing account.
+
+```
+POST /api/v1/passkeys:add-start
+```
+
+#### Request Body
+
+```json
+{
+  "device_name": "New MacBook Pro"
+}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "challenge": "xyz789...",
+    "rp": {
+      "id": "localhost",
+      "name": "WebAuthn Demo"
+    },
+    "user": {
+      "id": "user-uuid",
+      "name": "john_doe",
+      "displayName": "John Doe"
+    },
+    "pubKeyCredParams": [...],
+    "excludeCredentials": [
+      {
+        "type": "public-key",
+        "id": "existing-cred-id",
+        "transports": ["internal"]
+      }
+    ],
+    "timeout": 60000
+  },
+  "status": 200
+}
+```
+
+---
+
+### 10. Add New Passkey (Complete)
+
+Complete adding new passkey.
+
+```
+POST /api/v1/passkeys:add-complete
+```
+
+#### Request Body
+
+```json
+{
+  "device_name": "New MacBook Pro",
+  "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIi...",
+  "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRo...",
+  "transports": ["internal", "hybrid"]
+}
+```
+
+#### Response (201 Created)
+
+```json
+{
+  "data": {
+    "id": "new-cred-uuid",
+    "device_name": "New MacBook Pro",
+    "created_at": "2024-01-22T10:00:00Z"
+  },
+  "status": 200
+}
+```
+
+---
+
+### 11. Revoke All Passkeys
+
+Emergency revoke all passkeys (requires recovery code or re-authentication).
+
+```
+POST /api/v1/passkeys:revoke-all
+```
+
+#### Request Body
+
+```json
+{
+  "recovery_code": "ABCD-1234"
+}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "message": "All passkeys revoked",
+    "revoked_count": 3
+  },
+  "status": 200
+}
+```
+
+---
+
+## Recovery Endpoints
+
+### 12. Generate Recovery Codes
+
+Generate new recovery codes (invalidates previous codes).
+
+```
+POST /api/v1/recovery/codes:generate
+```
+
+#### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization` | Yes | Bearer token |
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "codes": [
+      "ABCD-1234",
+      "EFGH-5678",
+      "IJKL-9012",
+      "MNOP-3456",
+      "QRST-7890",
+      "UVWX-1234",
+      "YZAB-5678",
+      "CDEF-9012"
+    ],
+    "generated_at": "2024-01-22T10:00:00Z",
+    "warning": "Save these codes securely. They will not be shown again."
+  },
+  "status": 200
+}
+```
+
+---
+
+### 13. Get Recovery Codes Status
+
+Check remaining unused recovery codes.
+
+```
+GET /api/v1/recovery/codes:status
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "total_codes": 8,
+    "used_codes": 2,
+    "remaining_codes": 6,
+    "generated_at": "2024-01-22T10:00:00Z"
+  },
+  "status": 200
+}
+```
+
+---
+
+### 14. Initiate Account Recovery
+
+Start account recovery process (when all passkeys are lost).
+
+```
+POST /api/v1/recovery:initiate
+```
+
+#### Request Body
+
+```json
+{
+  "email": "john@example.com"
+}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "message": "Recovery instructions sent to email",
+    "recovery_token_expires_in": 3600
+  },
+  "status": 200
+}
+```
+
+---
+
+### 15. Complete Account Recovery
+
+Complete recovery using recovery code.
+
+```
+POST /api/v1/recovery:complete
+```
+
+#### Request Body
+
+```json
+{
+  "email": "john@example.com",
+  "recovery_code": "ABCD-1234",
+  "recovery_token": "token-from-email"
+}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "message": "Account recovered. Please register a new passkey.",
+    "registration_challenge": "xyz789...",
+    "rp": {...},
+    "user": {...},
+    "timeout": 300000
+  },
+  "status": 200
+}
+```
+
+---
+
+## Session Management Endpoints
+
+### 16. List Active Sessions
+
+Get all active sessions for user.
+
+```
+GET /api/v1/sessions
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "sessions": [
+      {
+        "id": "session-uuid-1",
+        "device_info": "Chrome on MacOS",
+        "ip_address": "192.168.1.100",
+        "created_at": "2024-01-22T08:00:00Z",
+        "last_activity_at": "2024-01-22T10:30:00Z",
+        "is_current": true
+      },
+      {
+        "id": "session-uuid-2",
+        "device_info": "Safari on iPhone",
+        "ip_address": "10.0.0.50",
+        "created_at": "2024-01-21T14:00:00Z",
+        "last_activity_at": "2024-01-21T18:00:00Z",
+        "is_current": false
+      }
+    ],
+    "total": 2
+  },
+  "status": 200
+}
+```
+
+---
+
+### 17. Revoke Session
+
+Revoke a specific session.
+
+```
+DELETE /api/v1/sessions/{sessionId}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "message": "Session revoked successfully"
+  },
+  "status": 200
+}
+```
+
+---
+
+### 18. Revoke All Other Sessions
+
+Logout from all other devices.
+
+```
+POST /api/v1/sessions:revoke-others
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "message": "All other sessions revoked",
+    "revoked_count": 3
+  },
+  "status": 200
+}
+```
+
+---
+
+### 19. Refresh Token
+
+Get new access token using refresh token.
+
+```
+POST /api/v1/sessions:refresh
+```
+
+#### Request Body
+
+```json
+{
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expires_in": 3600
+  },
+  "status": 200
+}
+```
+
+---
+
+## Security Endpoints
+
+### 20. Lock Account
+
+Immediately lock account (emergency).
+
+```
+POST /api/v1/security/account:lock
+```
+
+#### Request Body
+
+```json
+{
+  "reason": "Suspected compromise"
+}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "message": "Account locked successfully",
+    "locked_at": "2024-01-22T10:00:00Z"
+  },
+  "status": 200
+}
+```
+
+---
+
+### 21. Unlock Account
+
+Unlock account (requires recovery code or email verification).
+
+```
+POST /api/v1/security/account:unlock
+```
+
+#### Request Body
+
+```json
+{
+  "recovery_code": "ABCD-1234"
+}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "message": "Account unlocked successfully"
+  },
+  "status": 200
+}
+```
+
+---
+
+### 22. Get Authentication Logs
+
+Get user's authentication history.
+
+```
+GET /api/v1/security/auth-logs
+```
+
+#### Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `page` | int | Page number (default: 0) |
+| `size` | int | Page size (default: 20, max: 100) |
+| `success` | boolean | Filter by success/failure |
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "logs": [
+      {
+        "id": 123,
+        "operation_type": "AUTHENTICATION",
+        "success": true,
+        "ip_address": "192.168.1.100",
+        "user_agent": "Chrome/120.0...",
+        "country_code": "VN",
+        "city": "Ho Chi Minh City",
+        "created_at": "2024-01-22T10:30:00Z"
+      }
+    ],
+    "total": 50,
+    "page": 0,
+    "size": 20
+  },
+  "status": 200
+}
+```
 
 ---
 
@@ -273,6 +880,19 @@ POST /api/v1/auth/authenticate:complete
 | ERR_000008 | 404 | User not found |
 | ERR_000009 | 404 | Credential not found |
 | ERR_000010 | 400 | Sign count invalid |
+| ERR_000011 | 409 | Username already registered |
+| ERR_000012 | 409 | Credential already registered |
+| ERR_000013 | 400 | Challenge operation type mismatch |
+| ERR_000014 | 403 | User account inactive |
+| ERR_000015 | 400 | Credential-user mismatch |
+| ERR_000020 | 429 | Rate limit exceeded |
+| ERR_000021 | 400 | Cannot delete last passkey |
+| ERR_000022 | 400 | Invalid recovery code |
+| ERR_000023 | 400 | Recovery code expired |
+| ERR_000024 | 400 | Recovery code already used |
+| ERR_000025 | 403 | Account locked |
+| ERR_000026 | 401 | Session expired |
+| ERR_000027 | 401 | Invalid refresh token |
 | ERR_999999 | 500 | An unexpected error occurred |
 
 ---
