@@ -1,0 +1,30 @@
+version: "3"
+
+services:
+  web-authn-db:
+    container_name: web-authn-db
+    image: postgres:16.11
+    ports:
+      - "${DB_PORT}:5432"
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - web-authn-data:/var/lib/postgresql/data
+  web-authn-db-gui:
+    container_name: web-authn-db-gui
+    image: dpage/pgadmin4
+    ports:
+      - "${DB_GUI_PORT}:8080"
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${DB_GUI_ADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${DB_GUI_ADMIN_PASSWORD}
+      PGADMIN_LISTEN_PORT: 8080
+    volumes:
+      - ./servers.json:/pgadmin4/servers.json
+
+volumes:
+  web-authn-data:

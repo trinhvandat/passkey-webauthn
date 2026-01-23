@@ -1,0 +1,12 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Web Authn DB",
+      "Group": "Servers",
+      "Host": "web-authn-db",
+      "Port": 5432,
+      "MaintenanceDB": "web-authn",
+      "Username": "web-authn"
+    }
+  }
+}
