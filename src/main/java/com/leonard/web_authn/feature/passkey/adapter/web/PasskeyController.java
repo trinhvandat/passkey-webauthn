@@ -12,12 +12,12 @@ import com.leonard.web_authn.feature.passkey.usecase.PasskeyManagementService;
 import com.leonard.web_authn.feature.passkey.usecase.StartAddPasskeyUseCase;
 import com.leonard.web_authn.feature.passkey.usecase.command.CompleteAddPasskeyCommand;
 import com.leonard.web_authn.shared.dto.ApiResponse;
-import com.leonard.web_authn.shared.web.AuthenticatedUserResolver;
-import jakarta.servlet.http.HttpServletRequest;
+import com.leonard.web_authn.shared.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,14 +31,13 @@ public class PasskeyController {
     private final PasskeyManagementService passkeyManagementService;
     private final StartAddPasskeyUseCase startAddPasskeyUseCase;
     private final CompleteAddPasskeyUseCase completeAddPasskeyUseCase;
-    private final AuthenticatedUserResolver userResolver;
 
     @GetMapping
     @ResponseStatus(HttpStatus.OK)
-    public ApiResponse<List<PasskeyInfoDTO>> listPasskeys(HttpServletRequest request) {
-        String userId = userResolver.requireUserId(request);
-        log.info("Listing passkeys for user: {}", userId);
-        List<PasskeyInfoDTO> passkeys = passkeyManagementService.listPasskeys(userId).stream()
+    public ApiResponse<List<PasskeyInfoDTO>> listPasskeys(
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        log.info("Listing passkeys for user: {}", user.userId());
+        List<PasskeyInfoDTO> passkeys = passkeyManagementService.listPasskeys(user.userId()).stream()
                 .map(this::toDTO)
                 .toList();
         return ApiResponse.success(passkeys);
@@ -47,66 +46,61 @@ public class PasskeyController {
     @GetMapping("/{credentialId}")
     @ResponseStatus(HttpStatus.OK)
     public ApiResponse<PasskeyInfoDTO> getPasskey(
-            HttpServletRequest request,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable String credentialId) {
-        String userId = userResolver.requireUserId(request);
-        log.info("Getting passkey: {} for user: {}", credentialId, userId);
-        PasskeyInfoDTO passkey = toDTO(passkeyManagementService.getPasskey(userId, credentialId));
+        log.info("Getting passkey: {} for user: {}", credentialId, user.userId());
+        PasskeyInfoDTO passkey = toDTO(passkeyManagementService.getPasskey(user.userId(), credentialId));
         return ApiResponse.success(passkey);
     }
 
     @PatchMapping("/{credentialId}")
     @ResponseStatus(HttpStatus.OK)
     public ApiResponse<PasskeyInfoDTO> renamePasskey(
-            HttpServletRequest httpRequest,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable String credentialId,
             @Valid @RequestBody RenamePasskeyRequestDTO request) {
-        String userId = userResolver.requireUserId(httpRequest);
-        log.info("Renaming passkey: {} for user: {}", credentialId, userId);
-        PasskeyInfoDTO passkey = toDTO(passkeyManagementService.renamePasskey(userId, credentialId, request.getName()));
+        log.info("Renaming passkey: {} for user: {}", credentialId, user.userId());
+        PasskeyInfoDTO passkey = toDTO(passkeyManagementService.renamePasskey(user.userId(), credentialId, request.getName()));
         return ApiResponse.success(passkey);
     }
 
     @DeleteMapping("/{credentialId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deletePasskey(
-            HttpServletRequest request,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable String credentialId) {
-        String userId = userResolver.requireUserId(request);
-        log.info("Deleting passkey: {} for user: {}", credentialId, userId);
-        passkeyManagementService.deletePasskey(userId, credentialId);
+        log.info("Deleting passkey: {} for user: {}", credentialId, user.userId());
+        passkeyManagementService.deletePasskey(user.userId(), credentialId);
     }
 
     @PostMapping("/revoke-all")
     @ResponseStatus(HttpStatus.OK)
-    public ApiResponse<RevokeAllResponse> revokeAllPasskeys(HttpServletRequest request) {
-        String userId = userResolver.requireUserId(request);
-        log.info("Revoking all passkeys for user: {}", userId);
-        int count = passkeyManagementService.revokeAllPasskeys(userId);
+    public ApiResponse<RevokeAllResponse> revokeAllPasskeys(
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        log.info("Revoking all passkeys for user: {}", user.userId());
+        int count = passkeyManagementService.revokeAllPasskeys(user.userId());
         return ApiResponse.success(new RevokeAllResponse(count));
     }
 
     @PostMapping("/add:start")
     @ResponseStatus(HttpStatus.OK)
     public ApiResponse<StartAddPasskeyResponseDTO> startAddPasskey(
-            HttpServletRequest httpRequest,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @RequestBody(required = false) StartAddPasskeyRequestDTO request) {
-        String userId = userResolver.requireUserId(httpRequest);
         String deviceName = request != null ? request.getDeviceName() : null;
-        log.info("Starting add passkey for user: {}, deviceName: {}", userId, deviceName);
-        ChallengeResult result = startAddPasskeyUseCase.execute(userId, deviceName);
+        log.info("Starting add passkey for user: {}, deviceName: {}", user.userId(), deviceName);
+        ChallengeResult result = startAddPasskeyUseCase.execute(user.userId(), deviceName);
         return ApiResponse.success(toStartAddPasskeyResponse(result));
     }
 
     @PostMapping("/add:complete")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<CompleteAddPasskeyResponseDTO> completeAddPasskey(
-            HttpServletRequest httpRequest,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @Valid @RequestBody CompleteAddPasskeyRequestDTO request) {
-        String userId = userResolver.requireUserId(httpRequest);
-        log.info("Completing add passkey for user: {}", userId);
+        log.info("Completing add passkey for user: {}", user.userId());
         CompleteAddPasskeyCommand command = CompleteAddPasskeyCommand.builder()
-                .userId(userId)
+                .userId(user.userId())
                 .deviceName(request.getDeviceName())
                 .clientDataJSON(request.getClientDataJSON())
                 .attestationObject(request.getAttestationObject())

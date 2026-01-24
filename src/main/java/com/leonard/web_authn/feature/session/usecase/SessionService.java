@@ -11,7 +11,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,18 +31,19 @@ public class SessionService {
 
     private final UserSessionRepository userSessionRepository;
     private final AuthorizationService authorizationService;
-    private final BCryptPasswordEncoder passwordEncoder;
+    private final PasswordEncoder passwordEncoder;
     private final SecureRandom secureRandom;
     private final SecretKey jwtKey;
 
     public SessionService(
             UserSessionRepository userSessionRepository,
             AuthorizationService authorizationService,
+            PasswordEncoder passwordEncoder,
             @Value("${jwt.secret:defaultSecretKeyForDevelopmentOnlyMustBeAtLeast256Bits}") String jwtSecret
     ) {
         this.userSessionRepository = userSessionRepository;
         this.authorizationService = authorizationService;
-        this.passwordEncoder = new BCryptPasswordEncoder();
+        this.passwordEncoder = passwordEncoder;
         this.secureRandom = new SecureRandom();
         this.jwtKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
     }
@@ -108,6 +109,7 @@ public class SessionService {
         throw new InvalidRefreshTokenException();
     }
 
+    @SuppressWarnings("unchecked")
     public TokenValidationResult validateAccessToken(String accessToken) {
         try {
             Claims claims = Jwts.parser()
@@ -118,6 +120,8 @@ public class SessionService {
 
             String userId = claims.getSubject();
             String sessionId = claims.get("sessionId", String.class);
+            List<String> roles = claims.get("roles", List.class);
+            List<String> permissions = claims.get("permissions", List.class);
 
             // Verify session is still active
             UserSession session = userSessionRepository.findById(sessionId).orElse(null);
@@ -125,7 +129,7 @@ public class SessionService {
                 return TokenValidationResult.invalid("Session expired or revoked");
             }
 
-            return TokenValidationResult.valid(userId, sessionId);
+            return TokenValidationResult.valid(userId, sessionId, roles, permissions);
 
         } catch (JwtException e) {
             log.debug("JWT validation failed: {}", e.getMessage());
@@ -226,13 +230,15 @@ public class SessionService {
             LocalDateTime lastActivityAt
     ) {}
 
-    public record TokenValidationResult(boolean valid, String userId, String sessionId, String error) {
-        public static TokenValidationResult valid(String userId, String sessionId) {
-            return new TokenValidationResult(true, userId, sessionId, null);
+    public record TokenValidationResult(boolean valid, String userId, String sessionId,
+            List<String> roles, List<String> permissions, String error) {
+        public static TokenValidationResult valid(String userId, String sessionId,
+                List<String> roles, List<String> permissions) {
+            return new TokenValidationResult(true, userId, sessionId, roles, permissions, null);
         }
 
         public static TokenValidationResult invalid(String error) {
-            return new TokenValidationResult(false, null, null, error);
+            return new TokenValidationResult(false, null, null, null, null, error);
         }
     }
 }

@@ -9,11 +9,11 @@ import com.leonard.web_authn.feature.oauth.domain.AuthMethod;
 import com.leonard.web_authn.feature.oauth.usecase.OAuthProviderRegistry;
 import com.leonard.web_authn.feature.oauth.usecase.OAuthService;
 import com.leonard.web_authn.shared.dto.ApiResponse;
-import com.leonard.web_authn.shared.web.AuthenticatedUserResolver;
-import jakarta.servlet.http.HttpServletRequest;
+import com.leonard.web_authn.shared.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,7 +28,6 @@ public class OAuthController {
     private final OAuthService oAuthService;
     private final OAuthProviderRegistry providerRegistry;
     private final AuthMethodRepository authMethodRepository;
-    private final AuthenticatedUserResolver userResolver;
 
     @GetMapping("/providers")
     public ApiResponse<Map<String, Object>> getEnabledProviders() {
@@ -38,10 +37,10 @@ public class OAuthController {
 
     @PostMapping("/{provider}/authorize")
     public ApiResponse<OAuthAuthorizeResponseDTO> startAuthorization(
-            HttpServletRequest request,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable String provider) {
         // userId is optional - null for new signups, set for account linking
-        String userId = userResolver.resolveUserId(request);
+        String userId = user != null ? user.userId() : null;
 
         String authorizationUrl = oAuthService.startAuthorization(provider, userId);
         OAuthAuthorizeResponseDTO response = OAuthAuthorizeResponseDTO.builder()
@@ -71,27 +70,24 @@ public class OAuthController {
 
     @PostMapping("/{provider}/link")
     public ApiResponse<Void> linkProvider(
-            HttpServletRequest request,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable String provider,
             @Valid @RequestBody OAuthCallbackRequestDTO body) {
-        String userId = userResolver.requireUserId(request);
-        oAuthService.linkProvider(userId, provider, body.getCode(), body.getState());
+        oAuthService.linkProvider(user.userId(), provider, body.getCode(), body.getState());
         return ApiResponse.success(null);
     }
 
     @DeleteMapping("/{provider}/unlink")
     public ApiResponse<Void> unlinkProvider(
-            HttpServletRequest request,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable String provider) {
-        String userId = userResolver.requireUserId(request);
-        oAuthService.unlinkProvider(userId, provider);
+        oAuthService.unlinkProvider(user.userId(), provider);
         return ApiResponse.success(null);
     }
 
     @GetMapping("/methods")
-    public ApiResponse<List<AuthMethodInfoDTO>> getAuthMethods(HttpServletRequest request) {
-        String userId = userResolver.requireUserId(request);
-        List<AuthMethod> methods = authMethodRepository.findByUserIdAndIsActiveTrue(userId);
+    public ApiResponse<List<AuthMethodInfoDTO>> getAuthMethods(@AuthenticationPrincipal AuthenticatedUser user) {
+        List<AuthMethod> methods = authMethodRepository.findByUserIdAndIsActiveTrue(user.userId());
 
         List<AuthMethodInfoDTO> dtos = methods.stream()
                 .map(this::toAuthMethodInfoDTO)
