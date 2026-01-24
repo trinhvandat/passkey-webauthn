@@ -9,12 +9,13 @@ import com.leonard.web_authn.feature.user.adapter.repository.UserRepository;
 import com.leonard.web_authn.feature.user.domain.User;
 import com.leonard.web_authn.feature.user.domain.exception.UserNotFoundException;
 import com.leonard.web_authn.shared.dto.ApiResponse;
-import com.leonard.web_authn.shared.web.AuthenticatedUserResolver;
+import com.leonard.web_authn.shared.security.AuthenticatedUser;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,23 +29,22 @@ public class RecoveryController {
     private final RecoveryCodeService recoveryCodeService;
     private final SessionService sessionService;
     private final UserRepository userRepository;
-    private final AuthenticatedUserResolver userResolver;
 
     @PostMapping("/codes/generate")
     @ResponseStatus(HttpStatus.OK)
-    public ApiResponse<GenerateRecoveryCodesResponseDTO> generateRecoveryCodes(HttpServletRequest request) {
-        String userId = userResolver.requireUserId(request);
-        log.info("Generating recovery codes for user: {}", userId);
-        List<String> codes = recoveryCodeService.generateRecoveryCodes(userId);
+    public ApiResponse<GenerateRecoveryCodesResponseDTO> generateRecoveryCodes(
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        log.info("Generating recovery codes for user: {}", user.userId());
+        List<String> codes = recoveryCodeService.generateRecoveryCodes(user.userId());
         return ApiResponse.success(new GenerateRecoveryCodesResponseDTO(codes));
     }
 
     @GetMapping("/codes/status")
     @ResponseStatus(HttpStatus.OK)
-    public ApiResponse<RecoveryCodeStatusDTO> getRecoveryCodeStatus(HttpServletRequest request) {
-        String userId = userResolver.requireUserId(request);
-        log.info("Getting recovery code status for user: {}", userId);
-        RecoveryCodeService.RecoveryCodeStatus status = recoveryCodeService.getStatus(userId);
+    public ApiResponse<RecoveryCodeStatusDTO> getRecoveryCodeStatus(
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        log.info("Getting recovery code status for user: {}", user.userId());
+        RecoveryCodeService.RecoveryCodeStatus status = recoveryCodeService.getStatus(user.userId());
         return ApiResponse.success(new RecoveryCodeStatusDTO(
                 status.totalCodes(),
                 status.usedCodes(),

@@ -16,15 +16,16 @@ import com.leonard.web_authn.feature.user.domain.User;
 import com.leonard.web_authn.feature.user.domain.exception.UserNotFoundException;
 import com.leonard.web_authn.shared.dto.ApiResponse;
 import com.leonard.web_authn.shared.exception.InvalidRequestException;
-import com.leonard.web_authn.shared.web.AuthenticatedUserResolver;
-import jakarta.servlet.http.HttpServletRequest;
+import com.leonard.web_authn.shared.security.AuthenticatedUser;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -32,6 +33,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/security")
+@RequiredArgsConstructor
 @Slf4j
 public class SecurityController {
 
@@ -39,29 +41,14 @@ public class SecurityController {
     private final PasskeyAuthenticationLogRepository authLogRepository;
     private final UserSessionRepository userSessionRepository;
     private final RecoveryCodeRepository recoveryCodeRepository;
-    private final BCryptPasswordEncoder passwordEncoder;
-    private final AuthenticatedUserResolver userResolver;
-
-    public SecurityController(
-            UserRepository userRepository,
-            PasskeyAuthenticationLogRepository authLogRepository,
-            UserSessionRepository userSessionRepository,
-            RecoveryCodeRepository recoveryCodeRepository,
-            AuthenticatedUserResolver userResolver) {
-        this.userRepository = userRepository;
-        this.authLogRepository = authLogRepository;
-        this.userSessionRepository = userSessionRepository;
-        this.recoveryCodeRepository = recoveryCodeRepository;
-        this.passwordEncoder = new BCryptPasswordEncoder();
-        this.userResolver = userResolver;
-    }
+    private final PasswordEncoder passwordEncoder;
 
     @PostMapping("/account:lock")
     @ResponseStatus(HttpStatus.OK)
     public ApiResponse<LockAccountResponseDTO> lockAccount(
-            HttpServletRequest httpRequest,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @Valid @RequestBody(required = false) LockAccountRequestDTO request) {
-        String userId = userResolver.requireUserId(httpRequest);
+        String userId = authenticatedUser.userId();
         log.info("Locking account for user: {}", userId);
 
         User user = userRepository.findById(userId)
@@ -157,11 +144,11 @@ public class SecurityController {
     @GetMapping("/auth-logs")
     @ResponseStatus(HttpStatus.OK)
     public ApiResponse<AuthLogsResponseDTO> getAuthLogs(
-            HttpServletRequest httpRequest,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) Boolean success) {
-        String userId = userResolver.requireUserId(httpRequest);
+        String userId = authenticatedUser.userId();
         log.info("Getting auth logs for user: {}, page: {}, size: {}, success: {}", userId, page, size, success);
 
         // Validate page size

@@ -8,11 +8,12 @@ import com.leonard.web_authn.feature.authorization.domain.Role;
 import com.leonard.web_authn.feature.authorization.domain.UserRole;
 import com.leonard.web_authn.feature.authorization.usecase.RoleManagementService;
 import com.leonard.web_authn.shared.dto.ApiResponse;
-import com.leonard.web_authn.shared.web.AuthenticatedUserResolver;
-import jakarta.servlet.http.HttpServletRequest;
+import com.leonard.web_authn.shared.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -24,12 +25,10 @@ import java.util.List;
 public class RoleManagementController {
 
     private final RoleManagementService roleManagementService;
-    private final AuthenticatedUserResolver userResolver;
 
     @GetMapping
-    public ApiResponse<List<RoleInfoDTO>> listRoles(HttpServletRequest request) {
-        userResolver.requirePermission(request, "admin:roles");
-
+    @PreAuthorize("hasAuthority('admin:roles')")
+    public ApiResponse<List<RoleInfoDTO>> listRoles() {
         List<RoleInfoDTO> roles = roleManagementService.listAllRoles().stream()
                 .map(this::toRoleInfoDTO)
                 .toList();
@@ -37,17 +36,15 @@ public class RoleManagementController {
     }
 
     @GetMapping("/{roleId}")
-    public ApiResponse<RoleInfoDTO> getRole(HttpServletRequest request, @PathVariable Integer roleId) {
-        userResolver.requirePermission(request, "admin:roles");
-
+    @PreAuthorize("hasAuthority('admin:roles')")
+    public ApiResponse<RoleInfoDTO> getRole(@PathVariable Integer roleId) {
         Role role = roleManagementService.getRoleById(roleId);
         return ApiResponse.success(toRoleInfoDTO(role));
     }
 
     @GetMapping("/users/{targetUserId}")
-    public ApiResponse<UserRoleInfoDTO> getUserRoles(HttpServletRequest request, @PathVariable String targetUserId) {
-        userResolver.requirePermission(request, "user:read");
-
+    @PreAuthorize("hasAuthority('user:read')")
+    public ApiResponse<UserRoleInfoDTO> getUserRoles(@PathVariable String targetUserId) {
         List<UserRole> userRoles = roleManagementService.getUserRoles(targetUserId);
         UserRoleInfoDTO dto = UserRoleInfoDTO.builder()
                 .userId(targetUserId)
@@ -57,36 +54,32 @@ public class RoleManagementController {
     }
 
     @PostMapping("/users/{targetUserId}")
+    @PreAuthorize("hasAuthority('admin:roles')")
     public ApiResponse<Void> assignRole(
-            HttpServletRequest request,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable String targetUserId,
             @Valid @RequestBody AssignRoleRequestDTO body) {
-        String adminId = userResolver.requirePermission(request, "admin:roles");
-
-        roleManagementService.assignRole(targetUserId, body.getRoleId(), adminId);
+        roleManagementService.assignRole(targetUserId, body.getRoleId(), user.userId());
         return ApiResponse.success(null);
     }
 
     @DeleteMapping("/users/{targetUserId}/roles/{roleId}")
+    @PreAuthorize("hasAuthority('admin:roles')")
     public ApiResponse<Void> revokeRole(
-            HttpServletRequest request,
+            @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable String targetUserId,
             @PathVariable Integer roleId,
             @RequestBody(required = false) RevokeRoleRequestDTO body) {
-        String adminId = userResolver.requirePermission(request, "admin:roles");
-
         String reason = body != null ? body.getReason() : null;
-        roleManagementService.revokeRole(targetUserId, roleId, adminId, reason);
+        roleManagementService.revokeRole(targetUserId, roleId, user.userId(), reason);
         return ApiResponse.success(null);
     }
 
     @GetMapping("/me")
-    public ApiResponse<UserRoleInfoDTO> getMyRoles(HttpServletRequest request) {
-        String userId = userResolver.requireUserId(request);
-
-        List<UserRole> userRoles = roleManagementService.getUserRoles(userId);
+    public ApiResponse<UserRoleInfoDTO> getMyRoles(@AuthenticationPrincipal AuthenticatedUser user) {
+        List<UserRole> userRoles = roleManagementService.getUserRoles(user.userId());
         UserRoleInfoDTO dto = UserRoleInfoDTO.builder()
-                .userId(userId)
+                .userId(user.userId())
                 .roles(userRoles.stream().map(this::toRoleAssignment).toList())
                 .build();
         return ApiResponse.success(dto);

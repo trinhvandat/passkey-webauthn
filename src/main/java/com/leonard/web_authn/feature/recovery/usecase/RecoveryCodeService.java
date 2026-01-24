@@ -5,7 +5,7 @@ import com.leonard.web_authn.feature.recovery.domain.RecoveryCode;
 import com.leonard.web_authn.feature.recovery.domain.exception.InvalidRecoveryCodeException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,10 +22,10 @@ public class RecoveryCodeService {
     private static final int CODE_COUNT = 8;
     private static final int CODE_LENGTH = 8;
     private static final String CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Excluded confusing chars: I, O, 0, 1
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final RecoveryCodeRepository recoveryCodeRepository;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-    private final SecureRandom secureRandom = new SecureRandom();
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional
     public List<String> generateRecoveryCodes(String userId) {
@@ -100,7 +100,7 @@ public class RecoveryCodeService {
     private String generateCode() {
         StringBuilder code = new StringBuilder(CODE_LENGTH);
         for (int i = 0; i < CODE_LENGTH; i++) {
-            int index = secureRandom.nextInt(CODE_CHARS.length());
+            int index = SECURE_RANDOM.nextInt(CODE_CHARS.length());
             code.append(CODE_CHARS.charAt(index));
         }
         return code.toString();

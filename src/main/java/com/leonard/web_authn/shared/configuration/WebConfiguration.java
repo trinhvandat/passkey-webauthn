@@ -1,19 +1,13 @@
 package com.leonard.web_authn.shared.configuration;
 
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+/**
+ * Web MVC configuration.
+ * Note: CORS is configured in SecurityConfig to work with Spring Security.
+ */
 @Configuration
 public class WebConfiguration implements WebMvcConfigurer {
-
-    @Override
-    public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/api/**")
-                .allowedOrigins("http://localhost:3000", "http://localhost:5173")
-                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                .allowedHeaders("*")
-                .allowCredentials(true)
-                .maxAge(3600);
-    }
+    // CORS moved to SecurityConfig for proper integration with Spring Security
 }
