@@ -11,5 +11,7 @@ export default defineConfig({
         changeOrigin: true
       }
     }
-  }
+  },
+  // Handle SPA routing for OAuth callbacks
+  appType: 'spa'
 })

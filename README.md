@@ -25,6 +25,7 @@ This project implements passwordless authentication using the WebAuthn (Web Auth
 - **Passwordless Registration** - Register users with passkeys (biometrics/security keys)
 - **Passwordless Authentication** - Login using registered passkeys with JWT session tokens
 - **Multi-device Support** - Support for platform authenticators and roaming authenticators
+- **OAuth 2.0 Social Login** - Login with Google, GitHub (extensible to Facebook, Keycloak)
 
 ### Security
 - **Replay Attack Prevention** - One-time challenge usage with atomic validation
@@ -81,16 +82,17 @@ docker-compose up -d
 
 ### 2. Configure Environment
 
-Create `.env` file or set environment variables:
+Copy `sample.env` to `.env` and configure with your values:
 
-```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=web-authn
-DB_PASSWORD=WebAuthn@1234
-DB_NAME=web-authn
-MIGRATION_ENABLED=true
+```bash
+cp sample.env .env
+# Edit .env with your actual credentials
 ```
+
+See `sample.env` for all available configuration options including:
+- Database connection
+- JWT secret
+- OAuth providers (Google, GitHub)
 
 ### 3. Start Backend
 
@@ -163,6 +165,16 @@ Frontend runs on http://localhost:3000
 | POST | `/api/v1/security/account:unlock` | Unlock account |
 | GET | `/api/v1/security/auth-logs` | Get authentication history |
 
+### OAuth 2.0
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/oauth/providers` | List enabled OAuth providers |
+| POST | `/api/v1/oauth/{provider}/authorize` | Start OAuth authorization |
+| POST | `/api/v1/oauth/{provider}/callback` | Handle OAuth callback |
+| POST | `/api/v1/oauth/{provider}/link` | Link OAuth provider to account |
+| DELETE | `/api/v1/oauth/{provider}/unlink` | Unlink OAuth provider |
+| GET | `/api/v1/oauth/methods` | List user's auth methods |
+
 ### Example: Start Registration
 
 ```bash
@@ -217,6 +229,39 @@ web-authn:
 | -7 | ES256 | ECDSA with P-256 and SHA-256 |
 | -257 | RS256 | RSASSA-PKCS1-v1_5 with SHA-256 |
 | -8 | EdDSA | Edwards-curve Digital Signature |
+
+### OAuth 2.0 Configuration
+
+```yaml
+oauth:
+  providers:
+    google:
+      enabled: true
+      client-id: ${GOOGLE_CLIENT_ID}
+      client-secret: ${GOOGLE_CLIENT_SECRET}
+      scopes: openid,email,profile
+    github:
+      enabled: true
+      client-id: ${GITHUB_CLIENT_ID}
+      client-secret: ${GITHUB_CLIENT_SECRET}
+      scopes: user:email,read:user
+```
+
+#### Setting up OAuth Providers
+
+**Google OAuth:**
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing
+3. Enable "Google+ API" and "Google Identity"
+4. Go to Credentials > Create Credentials > OAuth Client ID
+5. Set Authorized redirect URI: `http://localhost:3000/oauth/callback/google`
+6. Copy Client ID and Client Secret to `.env`
+
+**GitHub OAuth:**
+1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
+2. Click "New OAuth App"
+3. Set Authorization callback URL: `http://localhost:3000/oauth/callback/github`
+4. Copy Client ID and Client Secret to `.env`
 
 ## Architecture
 

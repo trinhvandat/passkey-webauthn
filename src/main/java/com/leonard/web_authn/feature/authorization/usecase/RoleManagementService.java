@@ -53,6 +53,7 @@ public class RoleManagementService {
         UserRole userRole = UserRole.builder()
                 .userId(userId)
                 .roleId(roleId)
+                .role(role)  // Set the role relationship for immediate access within transaction
                 .assignedBy(performedBy)
                 .assignedAt(LocalDateTime.now())
                 .build();

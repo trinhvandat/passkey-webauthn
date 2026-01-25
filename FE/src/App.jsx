@@ -16,6 +16,14 @@ import AuthLogs from './components/AuthLogs';
 import AdminPanel from './components/AdminPanel';
 import AccountLinking from './components/AccountLinking';
 import OAuthButtons from './components/OAuthButtons';
+import OAuthCallback from './components/OAuthCallback';
+
+// Check if current path is an OAuth callback
+function getOAuthCallbackProvider() {
+  const path = window.location.pathname;
+  const match = path.match(/^\/oauth\/callback\/(\w+)$/);
+  return match ? match[1] : null;
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState('register');
@@ -25,6 +33,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [showRecoveryLogin, setShowRecoveryLogin] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const [oauthProvider, setOauthProvider] = useState(getOAuthCallbackProvider());
 
   const [registerForm, setRegisterForm] = useState({
     username: '',
@@ -149,6 +158,54 @@ function App() {
     setSessionId(null);
     showMessage('info', 'Logged out successfully');
   };
+
+  const handleOAuthSuccess = (result) => {
+    // Store tokens and set user
+    const userId = result.user_id || result.userId;
+    const currentSessionId = result.session_id || result.sessionId;
+
+    setSessionId(currentSessionId);
+    setUserId(userId);
+
+    const normalizedUser = {
+      user_id: userId,
+      username: result.username,
+      email: result.email,
+      display_name: result.display_name || result.displayName,
+      verified: true
+    };
+    setUser(normalizedUser);
+
+    // Clear OAuth state from URL
+    window.history.replaceState({}, document.title, '/');
+    setOauthProvider(null);
+    showMessage('success', 'Login successful!');
+  };
+
+  const handleOAuthError = (error) => {
+    window.history.replaceState({}, document.title, '/');
+    setOauthProvider(null);
+    showMessage('error', 'OAuth login failed: ' + error);
+  };
+
+  // OAuth callback handling
+  if (oauthProvider) {
+    return (
+      <div className="container">
+        <h1>WebAuthn Passkey Demo</h1>
+        <OAuthCallback
+          provider={oauthProvider}
+          onSuccess={handleOAuthSuccess}
+          onError={handleOAuthError}
+        />
+        {message && (
+          <div className={`message ${message.type}`}>
+            {message.text}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (!isWebAuthnSupported()) {
     return (
@@ -286,7 +343,7 @@ function App() {
                   onChange={(e) => setRegisterForm({ ...registerForm, username: e.target.value })}
                   required
                   disabled={loading}
-                  placeholder="Enter username"
+                  placeholder="Choose a username"
                 />
               </div>
               <div className="form-group">
@@ -297,7 +354,7 @@ function App() {
                   value={registerForm.displayName}
                   onChange={(e) => setRegisterForm({ ...registerForm, displayName: e.target.value })}
                   disabled={loading}
-                  placeholder="Enter display name"
+                  placeholder="How should we call you?"
                 />
               </div>
               <div className="form-group">
@@ -309,18 +366,29 @@ function App() {
                   onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
                   required
                   disabled={loading}
-                  placeholder="Enter email"
+                  placeholder="you@example.com"
                 />
               </div>
               <button type="submit" className="submit" disabled={loading}>
-                {loading ? <span className="loading"></span> : 'Register with Passkey'}
+                {loading ? (
+                  <span className="loading"></span>
+                ) : (
+                  <>
+                    <span className="btn-icon">🔐</span>
+                    Create Account with Passkey
+                  </>
+                )}
               </button>
+              <p className="form-hint">
+                You'll use your fingerprint, face, or security key to sign in - no password needed.
+              </p>
             </form>
           )}
 
           {activeTab === 'login' && (
-            <>
-              <form onSubmit={handleLogin}>
+            <div className="login-container">
+              {/* Passkey Login - Primary Method */}
+              <form onSubmit={handleLogin} className="login-form-section">
                 <div className="form-group">
                   <label htmlFor="login-username">Username or Email</label>
                   <input
@@ -334,17 +402,30 @@ function App() {
                   />
                 </div>
                 <button type="submit" className="submit" disabled={loading}>
-                  {loading ? <span className="loading"></span> : 'Login with Passkey'}
+                  {loading ? (
+                    <span className="loading"></span>
+                  ) : (
+                    <>
+                      <span className="btn-icon">🔐</span>
+                      Login with Passkey
+                    </>
+                  )}
                 </button>
               </form>
+
+              {/* OAuth Social Login */}
               <OAuthButtons />
-              <button
-                className="btn-link recovery-link"
-                onClick={() => setShowRecoveryLogin(true)}
-              >
-                Lost your passkey? Use a recovery code
-              </button>
-            </>
+
+              {/* Recovery Option */}
+              <div className="form-footer">
+                <button
+                  className="btn-link recovery-link"
+                  onClick={() => setShowRecoveryLogin(true)}
+                >
+                  Lost your passkey? Use a recovery code
+                </button>
+              </div>
+            </div>
           )}
         </>
       )}

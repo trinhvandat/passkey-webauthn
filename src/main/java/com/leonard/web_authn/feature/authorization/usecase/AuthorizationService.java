@@ -36,6 +36,7 @@ public class AuthorizationService {
 
     public boolean hasRole(String userId, String roleName) {
         return getActiveRoles(userId).stream()
+                .filter(ur -> ur.getRole() != null)  // Defensive null check
                 .anyMatch(ur -> ur.getRole().getName().equals(roleName));
     }
 
@@ -67,6 +68,7 @@ public class AuthorizationService {
     public UserAuthContext buildAuthContext(String userId) {
         List<UserRole> userRoles = getActiveRoles(userId);
         Set<String> roleNames = userRoles.stream()
+                .filter(ur -> ur.getRole() != null)  // Defensive null check
                 .map(ur -> ur.getRole().getName())
                 .collect(Collectors.toSet());
         Set<String> permissions = getEffectivePermissions(userId);

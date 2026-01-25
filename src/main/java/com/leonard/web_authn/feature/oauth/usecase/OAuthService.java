@@ -200,10 +200,12 @@ public class OAuthService {
             UserRole userRole = UserRole.builder()
                     .userId(userId)
                     .roleId(role.getId())
+                    .role(role)  // Set the role relationship for immediate access within transaction
                     .assignedBy("SYSTEM")
                     .assignedAt(LocalDateTime.now())
                     .build();
             userRoleRepository.save(userRole);
+            log.info("Assigned default USER role to user {}", userId);
         });
     }
 

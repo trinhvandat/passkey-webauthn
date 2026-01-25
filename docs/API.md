@@ -866,6 +866,232 @@ GET /api/v1/security/auth-logs
 
 ---
 
+## OAuth 2.0 Endpoints
+
+OAuth 2.0 enables social login with Google, GitHub, and other providers.
+
+### 23. Get Enabled Providers
+
+List all enabled OAuth providers.
+
+```
+GET /api/v1/oauth/providers
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "providers": ["google", "github"]
+  },
+  "status": 200
+}
+```
+
+---
+
+### 24. Start OAuth Authorization
+
+Initiates OAuth authorization flow.
+
+```
+POST /api/v1/oauth/{provider}/authorize
+```
+
+#### Path Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `provider` | string | OAuth provider (google, github) |
+
+#### Headers (Optional)
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization` | No | Bearer token (for account linking) |
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?client_id=..."
+  },
+  "status": 200
+}
+```
+
+---
+
+### 25. Handle OAuth Callback
+
+Processes OAuth provider callback after user authorization.
+
+```
+POST /api/v1/oauth/{provider}/callback
+```
+
+#### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `code` | string | Yes | Authorization code from provider |
+| `state` | string | Yes | State token for CSRF protection |
+
+```json
+{
+  "code": "4/0AX4XfWg...",
+  "state": "abc123xyz..."
+}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": {
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "johndoe",
+    "email": "john@example.com",
+    "display_name": "John Doe",
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4...",
+    "expires_in": 900,
+    "session_id": "session-uuid"
+  },
+  "status": 200
+}
+```
+
+#### Error Responses
+
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | ERR_000030 | Invalid OAuth state |
+| 400 | ERR_000031 | OAuth state expired |
+| 400 | ERR_000032 | OAuth provider error |
+
+---
+
+### 26. Link OAuth Provider
+
+Links an OAuth provider to an existing authenticated account.
+
+```
+POST /api/v1/oauth/{provider}/link
+```
+
+#### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization` | Yes | Bearer token |
+
+#### Request Body
+
+```json
+{
+  "code": "4/0AX4XfWg...",
+  "state": "abc123xyz..."
+}
+```
+
+#### Response (200 OK)
+
+```json
+{
+  "data": null,
+  "status": 200
+}
+```
+
+#### Error Responses
+
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | ERR_000033 | Provider already linked |
+| 400 | ERR_000034 | Account already linked to another user |
+
+---
+
+### 27. Unlink OAuth Provider
+
+Removes an OAuth provider from the account.
+
+```
+DELETE /api/v1/oauth/{provider}/unlink
+```
+
+#### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization` | Yes | Bearer token |
+
+#### Response (200 OK)
+
+```json
+{
+  "data": null,
+  "status": 200
+}
+```
+
+#### Error Responses
+
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | ERR_000035 | Cannot unlink last auth method |
+| 404 | ERR_000036 | Auth method not found |
+
+---
+
+### 28. Get Auth Methods
+
+Lists all authentication methods linked to the account.
+
+```
+GET /api/v1/oauth/methods
+```
+
+#### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization` | Yes | Bearer token |
+
+#### Response (200 OK)
+
+```json
+{
+  "data": [
+    {
+      "id": "method-uuid-1",
+      "provider": "PASSKEY",
+      "provider_email": null,
+      "provider_name": null,
+      "is_primary": true,
+      "linked_at": "2024-01-15T10:30:00Z",
+      "last_used_at": "2024-01-22T08:15:00Z"
+    },
+    {
+      "id": "method-uuid-2",
+      "provider": "GOOGLE",
+      "provider_email": "john@gmail.com",
+      "provider_name": "John Doe",
+      "provider_avatar_url": "https://...",
+      "is_primary": false,
+      "linked_at": "2024-01-20T14:00:00Z",
+      "last_used_at": "2024-01-21T09:00:00Z"
+    }
+  ],
+  "status": 200
+}
+```
+
+---
+
 ## Error Codes Reference
 
 | Code | HTTP Status | Message |
@@ -893,6 +1119,13 @@ GET /api/v1/security/auth-logs
 | ERR_000025 | 403 | Account locked |
 | ERR_000026 | 401 | Session expired |
 | ERR_000027 | 401 | Invalid refresh token |
+| ERR_000030 | 400 | Invalid OAuth state |
+| ERR_000031 | 400 | OAuth state expired |
+| ERR_000032 | 400 | OAuth provider error |
+| ERR_000033 | 400 | Provider already linked |
+| ERR_000034 | 400 | Account already linked to another user |
+| ERR_000035 | 400 | Cannot unlink last auth method |
+| ERR_000036 | 404 | Auth method not found |
 | ERR_999999 | 500 | An unexpected error occurred |
 
 ---

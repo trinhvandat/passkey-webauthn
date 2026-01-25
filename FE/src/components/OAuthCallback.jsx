@@ -1,10 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { handleOAuthCallback, setTokens, setUserId } from '../api';
 
 export default function OAuthCallback({ provider, onSuccess, onError }) {
   const [status, setStatus] = useState('Processing...');
+  const processedRef = useRef(false);  // Prevent duplicate calls in React Strict Mode
 
   useEffect(() => {
+    // Prevent duplicate execution in React 18 Strict Mode
+    if (processedRef.current) {
+      return;
+    }
+    processedRef.current = true;
+
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const state = params.get('state');
