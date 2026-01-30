@@ -47,6 +47,10 @@ public class SecurityConfig {
 
                 // Configure endpoint authorization
                 .authorizeHttpRequests(auth -> auth
+                        // Actuator endpoints - Health check
+                        .requestMatchers("/actuator/health/**").permitAll()
+                        .requestMatchers("/actuator/info").permitAll()
+
                         // Public endpoints - Authentication flow
                         .requestMatchers("/api/v1/auth/**").permitAll()
 

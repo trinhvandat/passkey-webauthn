@@ -70,6 +70,12 @@
 			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
 
+		<!-- Spring Actuator for health check -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
 		<!-- JWT (jjwt) dependencies -->
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
