@@ -50,10 +50,10 @@ jobs:
           --query "Reservations[*].Instances[*].InstanceId" \
           --output text)
 
-          echo "Deploying to Instance: $INSTANCE_ID"
+          echo "Deploying to Instance: $INSTANCE_ID" 
           
           aws ssm send-command \
-          --instance-ids "$INSTANCE_ID"
+          --instance-ids "$INSTANCE_ID" \
           --document-name "AWS-RunShellScript" \
           --comment "Deploying Java App" \
           --parameters 'commands=[
