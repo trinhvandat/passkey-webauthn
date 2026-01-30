@@ -1,27 +1,27 @@
-# Stage 1: Build
-FROM eclipse-temurin:17-jdk-jammy AS builder
-
-WORKDIR /app
-
-# Copy Maven wrapper và pom.xml trước để cache dependencies
-COPY mvnw .
-COPY .mvn .mvn
-COPY pom.xml .
-
-# Cấp quyền execute cho mvnw
-RUN chmod +x mvnw
-
-# Download dependencies (layer này được cache nếu pom.xml không đổi)
-RUN ./mvnw dependency:go-offline -B
-
-# Copy source code
-COPY src ./src
-
-# Build ứng dụng, skip tests để build nhanh hơn
-RUN ./mvnw package -DskipTests -B
+## Stage 1: Build
+#FROM eclipse-temurin:17-jdk-jammy AS builder
+#
+#WORKDIR /app
+#
+## Copy Maven wrapper và pom.xml trước để cache dependencies
+#COPY mvnw .
+#COPY .mvn .mvn
+#COPY pom.xml .
+#
+## Cấp quyền execute cho mvnw
+#RUN chmod +x mvnw
+#
+## Download dependencies (layer này được cache nếu pom.xml không đổi)
+#RUN ./mvnw dependency:go-offline -B
+#
+## Copy source code
+#COPY src ./src
+#
+## Build ứng dụng, skip tests để build nhanh hơn
+#RUN ./mvnw package -DskipTests -B
 
 # Stage 2: Runtime
-FROM eclipse-temurin:17-jre-jammy AS runtime
+FROM eclipse-temurin:17-jre-jammy
 
 WORKDIR /app
 
@@ -29,8 +29,12 @@ WORKDIR /app
 RUN groupadd -g 1001 appgroup && \
     useradd -u 1001 -g appgroup -s /bin/bash appuser
 
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # Copy JAR file từ builder stage
-COPY --from=builder /app/target/*.jar app.jar
+COPY target/web-authn-*.jar ./
+RUN rm -f *.original
+RUN mv web-authn-*.jar app.jar
 
 # Chuyển sang non-root user
 USER appuser
