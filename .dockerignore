@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.idea
+*.iml
+.vscode
+
+# Build outputs
+target/
+!target/*.jar
+
+# Logs
+*.log
+logs/
+
+# Frontend (build riêng nếu cần)
+FE/
+
+# Terraform
+terraform/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Environment files
+.env
+.env.*
+*.env
+
+# Documentation
+*.md
+LICENSE
+
+# Tests
+src/test/
+
+# Misc
+*.tmp
+*.bak
+*.swp

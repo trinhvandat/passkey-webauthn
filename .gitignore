@@ -37,3 +37,13 @@ build/
 mvnw
 mvnw.cmd
 .claude
+
+
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+*.tfvars
+*.tfvars.json
+.terraformrc
+terraform.rc
