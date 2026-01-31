@@ -1,11 +1,3 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "6.17.0"
-    }
-  }
-}
 # Security group
 resource "aws_security_group" "app_sg" {
   name = "${var.env_name}-app-sg"
@@ -24,11 +16,18 @@ resource "aws_security_group" "app_sg" {
     protocol = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
 resource "aws_iam_role" "ec2_ssm_role" {
   name = "${var.env_name}-ec2-ssm-role"
-  assume_role_policy = jsondecode({
+  assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Action = "sts:AssumeRole"
@@ -41,7 +40,12 @@ resource "aws_iam_role" "ec2_ssm_role" {
 }
 
 resource "aws_iam_role_policy_attachment" "ssm_policy" {
-  policy_arn = "arn:aws:iam:aws:policy/AmazonSSMManagedInstanceCore"
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  role       = aws_iam_role.ec2_ssm_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "ecr_only" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
   role       = aws_iam_role.ec2_ssm_role.name
 }
 
