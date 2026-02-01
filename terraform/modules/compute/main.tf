@@ -54,6 +54,26 @@ resource "aws_iam_instance_profile" "ec2_profile" {
   role = aws_iam_role.ec2_ssm_role.name
 }
 
+resource "aws_iam_role_policy" "ssm_read_policy" {
+  name = "${var.env_name}-ssm-read-policy"
+  role   = aws_iam_role.ec2_ssm_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action   = [
+          "ssm:GetParametersByPath",
+          "ssm:GetParameters",
+          "ssm:GetParameter"
+        ]
+        Effect   = "Allow"
+        Resource = "arn:aws:ssm:ap-southeast-1:*:parameter/${var.env_name}/auth-service/*"
+      }
+    ]
+  })
+}
+
 resource "aws_instance" "app_server" {
   ami = var.ami_id
   instance_type = var.instance_type
