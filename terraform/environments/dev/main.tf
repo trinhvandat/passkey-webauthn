@@ -12,10 +12,26 @@ module "compute" {
   subnet_id = module.network.public_subnet_id
   ami_id = "ami-039a8ebebdd2a1def"
   instance_type = "t3.micro"
+  app_configs = {
+    DB_HOST = module.database.db_endpoint
+    DB_PORT = 5432
+    MIGRATION_ENABLED = true
+  }
+  app_secrets = {
+    DB_NAME = "webauthn"
+    DB_USER = "AiblesUser"
+    DB_PASSWORD = "Aibles2025"
+
+    JWT_SECRET = "your-jwt-secret-key-at-least-256-bits-long-for-security"
+
+    GOOGLE_CLIENT_ID="your-google-client-id"
+    GOOGLE_CLIENT_SECRET="your-google-client-secret"
+
+    GITHUB_CLIENT_ID = "your-github-client-id"
+    GITHUB_CLIENT_SECRET = "your-github-client-secret"
+  }
   user_data = templatefile("${path.module}/scripts/user_data.sh", {
-    db_endpoint = module.database.db_endpoint
-    db_user = "AiblesUser"
-    db_pass = "Aibles2025"
+    env_from_terraform = "dev-auth"
   })
 }
 
